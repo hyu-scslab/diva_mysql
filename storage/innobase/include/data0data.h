@@ -35,6 +35,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "univ.i"
 
+
 #include "data0type.h"
 #include "data0types.h"
 #include "dict0types.h"
@@ -315,6 +316,7 @@ occupied by the field structs or the tuple struct is not counted.
 @return sum of data lens */
 UNIV_INLINE
 ulint dtuple_get_data_size(const dtuple_t *tuple, ulint comp);
+
 /** Compare two data tuples.
 @param[in] tuple1 first data tuple
 @param[in] tuple2 second data tuple

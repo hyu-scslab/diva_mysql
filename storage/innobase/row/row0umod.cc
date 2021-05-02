@@ -119,9 +119,12 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t row_undo_mod_clust_low(
       btr_pcur_restore_position(mode, pcur, mtr);
 
   ut_ad(success);
+#ifdef J3VM
+  /** JAESEON: TODO. */
+#else
   ut_ad(rec_get_trx_id(btr_cur_get_rec(btr_cur), btr_cur_get_index(btr_cur)) ==
         thr_get_trx(thr)->id);
-
+#endif
   if (mode != BTR_MODIFY_LEAF &&
       dict_index_is_online_ddl(btr_cur_get_index(btr_cur))) {
     *rebuilt_old_pk =
@@ -327,8 +330,11 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t
     }
   }
 
+#ifdef J3VM
+  /* JAESEON */
+#else
   ut_ad(rec_get_trx_id(btr_pcur_get_rec(pcur), index) == node->new_trx_id);
-
+#endif
   btr_pcur_commit_specify_mtr(pcur, &mtr);
 
   DEBUG_SYNC_C("ib_undo_mod_before_remove_clust");

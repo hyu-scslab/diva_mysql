@@ -1217,6 +1217,12 @@ static ulint trx_undo_page_report_modify(
         TRX_UNDO_UPDATE);
   table = index->table;
 
+#ifdef J3VM
+  if (rec_is_user_rec(rec, index) && 
+      rec_get_toggle_flag(rec, dict_table_is_comp(table))) {
+    rec += rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+  }
+#endif
   /* If table instance is temporary then select noredo rseg as changes
   to undo logs don't need REDO logging given that they are not
   restored on restart as corresponding object doesn't exist on restart.*/
@@ -1696,6 +1702,9 @@ static ulint trx_undo_page_report_modify(
   /* Write to the REDO log about this change in the UNDO log */
 
   trx_undof_page_add_undo_rec_log(undo_page, first_free, ptr - undo_page, mtr);
+#ifdef J3VM
+  /* J3VM:: Our side */
+#endif
   return first_free;
 }
 

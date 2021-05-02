@@ -218,7 +218,21 @@ SET(INNOBASE_SOURCES
   ut/ut0test.cc
   ut/ut0ut.cc
   ut/ut0vec.cc
-  ut/ut0wqueue.cc)
+  ut/ut0wqueue.cc
+	pleaf/pleaf.cc
+	pleaf/pleaf_internals.cc
+	pleaf/pleaf_reader.cc
+	pleaf/pleaf_writer.cc
+	pleaf/pleaf_buf.cc
+	pleaf/pleaf_hash.cc
+	pleaf/pleaf_stack_helper.cc
+	pleaf/pleaf_bufpage.cc
+	pleaf/pleaf_mgr.cc
+	ebi_tree/ebi_tree_utils.cc
+	ebi_tree/ebi_tree_hash.cc
+	ebi_tree/ebi_tree_buf.cc
+	ebi_tree/ebi_tree.cc
+	ebi_tree/ebi_tree_process.cc)
 
 # There seems to be a bug in gcc for Oracle Linux 8 on ARM.
 # storage/innobase/ut/ut0test.cc:213:76:

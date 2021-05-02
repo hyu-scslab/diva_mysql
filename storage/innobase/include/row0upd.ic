@@ -189,10 +189,11 @@ void row_upd_rec_sys_fields(
     /* During IMPORT the trx id in the record can be in the
     future, if the .ibd file is being imported from another
     instance. During IMPORT roll_ptr will be 0. */
+    
     ut_ad(roll_ptr == 0 ||
           lock_check_trx_id_sanity(trx_read_trx_id(rec + offset), rec, index,
                                    offsets));
-
+    
     trx_write_trx_id(rec + offset, trx->id);
     trx_write_roll_ptr(rec + offset + DATA_TRX_ID_LEN, roll_ptr);
   }

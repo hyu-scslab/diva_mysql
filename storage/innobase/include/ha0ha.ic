@@ -144,8 +144,11 @@ const rec_t *ha_search_and_get_data(
     ulint fold)          /*!< in: folded value of the searched data */
 {
   hash_assert_can_search(table, fold);
+#ifdef J3VM
+  /** JAESEON:: TODO. */
+#else
   ut_ad(btr_search_enabled);
-
+#endif
   for (const ha_node_t *node = ha_chain_get_first(table, fold); node != nullptr;
        node = ha_chain_get_next(node)) {
     if (node->fold == fold) {
@@ -168,8 +171,11 @@ ha_node_t *ha_search_with_data(
 
   hash_assert_can_search(table, fold);
 
+#ifdef J3VM
+  // TODO
+#else
   ut_ad(btr_search_enabled);
-
+#endif
   node = ha_chain_get_first(table, fold);
 
   while (node) {
@@ -195,8 +201,11 @@ ibool ha_search_and_delete_if_found(
   ha_node_t *node;
 
   hash_assert_can_modify(table, fold);
+#ifdef J3VM
+  /** JAESEON: TODO. */
+#else
   ut_ad(btr_search_enabled);
-
+#endif
   node = ha_search_with_data(table, fold, data);
 
   if (node) {

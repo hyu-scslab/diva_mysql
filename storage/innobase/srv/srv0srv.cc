@@ -744,6 +744,14 @@ os_event_t srv_buf_dump_event;
 /** Event to signal the buffer pool resize thread */
 os_event_t srv_buf_resize_event;
 
+#ifdef J3VM
+/** Event to signal the pleaf generator thread */
+os_event_t srv_pleaf_generator_event;
+
+/** Event to signal the ebi tree thread */
+os_event_t srv_ebi_tree_event;
+#endif /* J3VM */
+
 /** The buffer pool dump/load file name */
 char *srv_buf_dump_filename;
 
@@ -1132,6 +1140,12 @@ static void srv_init(void) {
 
   srv_buf_resize_event = os_event_create();
 
+#ifdef J3VM
+  srv_pleaf_generator_event = os_event_create();
+
+  srv_ebi_tree_event = os_event_create();
+#endif /* J3VM */
+
   ut_d(srv_master_thread_disabled_event = os_event_create());
 
   /* page_zip_stat_per_index_mutex is acquired from:
@@ -1179,6 +1193,11 @@ void srv_free(void) {
   }
 
   os_event_destroy(srv_buf_resize_event);
+
+#ifdef J3VM
+  os_event_destroy(srv_pleaf_generator_event);
+  os_event_destroy(srv_ebi_tree_event);
+#endif /* J3VM */
 
 #ifdef UNIV_DEBUG
   os_event_destroy(srv_master_thread_disabled_event);

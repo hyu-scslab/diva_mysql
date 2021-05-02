@@ -227,7 +227,16 @@ void PageBulk::insert(const rec_t *rec, ulint *offsets) {
   page_header_set_ptr(m_page, nullptr, PAGE_HEAP_TOP, m_heap_top + rec_size);
 
   /* 1. Copy the record to page. */
+#ifdef J3VM
+  rec_t *insert_rec;
+  if (rec_is_user_rec(rec, reinterpret_cast<dict_index_t*>(offsets[3]))) {
+    insert_rec = rec_copy_special(m_heap_top, rec, offsets);
+  } else {
+    insert_rec = rec_copy(m_heap_top, rec, offsets);
+  }
+#else
   rec_t *insert_rec = rec_copy(m_heap_top, rec, offsets);
+#endif
   rec_offs_make_valid(insert_rec, m_index, offsets);
 
   /* 2. Insert the record in the linked list. */

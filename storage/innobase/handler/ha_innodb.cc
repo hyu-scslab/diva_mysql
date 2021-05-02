@@ -197,6 +197,12 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include <string>
 #include <vector>
 
+#ifdef J3VM
+#include "pleaf_mgr.h"
+#include "ebi_tree_utils.h"
+#include "ebi_tree_process.h"
+#endif /* J3VM */
+
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif /* HAVE_UNISTD_H */
@@ -711,6 +717,9 @@ static PSI_rwlock_info all_innodb_rwlocks[] = {
     PSI_RWLOCK_KEY(index_online_log, 0, PSI_DOCUMENT_ME),
     PSI_RWLOCK_KEY(dict_table_stats, 0, PSI_DOCUMENT_ME),
     PSI_RWLOCK_KEY(hash_table_locks, 0, PSI_DOCUMENT_ME),
+#ifdef J3VM
+    PSI_RWLOCK_KEY(pleaf_lock, 0, PSI_DOCUMENT_ME),
+#endif /* J3VM */
 };
 #endif /* UNIV_PFS_RWLOCK */
 
@@ -731,6 +740,10 @@ static PSI_thread_info all_innodb_threads[] = {
     PSI_KEY(io_read_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(io_write_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(buf_resize_thread, 0, 0, PSI_DOCUMENT_ME),
+#ifdef J3VM
+    PSI_KEY(pleaf_generator_thread, 0, 0, PSI_DOCUMENT_ME),
+    PSI_KEY(ebi_tree_thread, 0, 0, PSI_DOCUMENT_ME),
+#endif /* J3VM */
     PSI_KEY(log_writer_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(log_checkpointer_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(log_flusher_thread, 0, 0, PSI_DOCUMENT_ME),

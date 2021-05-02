@@ -340,6 +340,9 @@ enum latch_level_t {
 
   SYNC_LEVEL_VARYING,
 
+#ifdef J3VM
+	SYNC_PLEAF,
+#endif /* J3VM */
   /** This can be used to suppress order checking. */
   SYNC_NO_ORDER_CHECK,
 
@@ -468,6 +471,9 @@ enum latch_id_t {
   LATCH_ID_DBLR,
   LATCH_ID_REDO_LOG_ARCHIVE_ADMIN_MUTEX,
   LATCH_ID_REDO_LOG_ARCHIVE_QUEUE_MUTEX,
+#ifdef J3VM
+  LATCH_ID_PLEAF,
+#endif /* J3VM */
   LATCH_ID_TEST_MUTEX,
   LATCH_ID_MAX = LATCH_ID_TEST_MUTEX
 };

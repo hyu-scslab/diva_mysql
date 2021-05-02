@@ -181,6 +181,28 @@ class ReadView {
     return (!std::binary_search(p, p + m_ids.size(), id));
   }
 
+#ifdef J3VM
+   bool changes_visible_simple(trx_id_t id) const
+      MY_ATTRIBUTE((warn_unused_result)) {
+
+    if (id < m_up_limit_id || id == m_creator_trx_id) {
+      return (true);
+    }
+
+    if (id >= m_low_limit_id) {
+      return (false);
+
+    } else if (m_ids.empty()) {
+      return (true);
+    }
+
+    const ids_t::value_type *p = m_ids.data();
+
+    return (!std::binary_search(p, p + m_ids.size(), id));
+  } 
+
+  void background_work();
+#endif
   /**
   @param id		transaction to check
   @return true if view sees transaction id */
@@ -229,6 +251,21 @@ class ReadView {
   /**
   @return true if there are no transaction ids in the snapshot */
   bool empty() const { return (m_ids.empty()); }
+
+#ifdef J3VM
+  trx_id_t up_limit_id() const { return (m_up_limit_id); }
+  ib_uint64_t seq_no() const { return (m_seq_no); }
+  /**
+  Copy state from another view. Must call copy_complete() to finish.
+  @param other		view to copy from */
+  void copy_prepare_simple(const ReadView &other);
+
+  /**
+  Complete the copy, insert the creator transaction id into the
+  m_trx_ids too and adjust the m_up_limit_id *, if required */
+  void copy_complete_simple();
+
+#endif /* J3VM */
 
 #ifdef UNIV_DEBUG
   /**
@@ -299,6 +336,10 @@ class ReadView {
   whose transaction number is strictly smaller (<) than this value:
   they can be removed in purge if not needed by other views */
   trx_id_t m_low_limit_no;
+
+#ifdef J3VM
+  ib_uint64_t m_seq_no;
+#endif /* J3VM */
 
 #ifdef UNIV_DEBUG
   /** The low limit number up to which read views don't need to access

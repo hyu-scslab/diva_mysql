@@ -2818,7 +2818,6 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t row_upd_clust_rec(
   /* Try optimistic updating of the record, keeping changes within
   the page; we do not check locks because we assume the x-lock on the
   record to update */
-
   if (node->cmpl_info & UPD_NODE_NO_SIZE_CHANGE) {
     err = btr_cur_update_in_place(flags | BTR_NO_LOCKING_FLAG, btr_cur, offsets,
                                   node->update, node->cmpl_info, thr,

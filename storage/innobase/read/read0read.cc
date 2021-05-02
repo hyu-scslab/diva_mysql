@@ -36,6 +36,10 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "srv0srv.h"
 #include "trx0sys.h"
 
+#ifdef J3VM
+#include "include/ebi_tree_utils.h"
+#include "include/ebi_tree.h"
+#endif
 /*
 -------------------------------------------------------------------------------
 FACT A: Cursor read view on a secondary index sees only committed versions
@@ -337,6 +341,9 @@ MVCC::MVCC(ulint size) {
 
     UT_LIST_ADD_FIRST(m_free, view);
   }
+#ifdef J3VM
+  m_view_seq_no = 1;
+#endif /* J3VM */
 }
 
 MVCC::~MVCC() {
@@ -514,6 +521,7 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
   /** If no new RW transaction has been started since the last view
   was created then reuse the the existing view. */
   if (view != nullptr) {
+
     uintptr_t p = reinterpret_cast<uintptr_t>(view);
 
     view = reinterpret_cast<ReadView *>(p & ~1);
@@ -532,7 +540,22 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
       view->m_closed = false;
 
       if (view->m_low_limit_id == trx_sys_get_max_trx_id()) {
+#ifdef J3VM
+        if (trx->declared_to_be_inside_innodb || 
+            trx->is_parallel_reader) {
+
+          mutex_enter(&trx_sys->mutex);
+          ut_a(trx->isolation_level == TRX_ISO_REPEATABLE_READ &&
+              !trx->internal && trx->in_innodb && !trx->ddl_operation);
+          ut_a(!trx->ebi_node);
+          trx->ebi_node = EbiIncreaseRefCount(view); 
+          ut_a(trx->ebi_node);
+          trx_sys_mutex_exit();
+        }
         return;
+#else
+        return;
+#endif /* J3VM */
       } else {
         view->m_closed = true;
       }
@@ -542,10 +565,17 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
 
     UT_LIST_REMOVE(m_views, view);
 
+#ifdef J3VM
+    view->m_seq_no = __sync_fetch_and_add(&m_view_seq_no, 1);
+#endif /* J3VM */
+
   } else {
     mutex_enter(&trx_sys->mutex);
 
     view = get_view();
+#ifdef J3VM
+    view->m_seq_no = __sync_fetch_and_add(&m_view_seq_no, 1);
+#endif /* J3VM */
   }
 
   if (view != nullptr) {
@@ -557,6 +587,15 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
 
     ut_ad(validate());
   }
+#ifdef J3VM
+  if (view != nullptr && (trx->declared_to_be_inside_innodb ||
+      trx->is_parallel_reader)) {
+    ut_a(trx->isolation_level == TRX_ISO_REPEATABLE_READ &&
+        !trx->internal && trx->in_innodb && !trx->ddl_operation);
+    trx->ebi_node = EbiIncreaseRefCount(view); 
+    ut_a(trx->ebi_node);
+  }
+#endif
 
   trx_sys_mutex_exit();
 }
@@ -598,6 +637,38 @@ ReadView *MVCC::get_oldest_view() const {
 
   return (view);
 }
+
+#ifdef J3VM
+/**
+Get the latest (active) view in the system.
+@return latest view if found or NULL */
+
+void ReadView::background_work() {
+    EbiNode temp_node;
+
+    trx_sys_mutex_enter();
+    this->prepare(0);
+    temp_node = EbiIncreaseRefCount(this);
+    EbiDecreaseRefCount(temp_node);
+
+    trx_sys_mutex_exit();
+}
+
+ReadView *MVCC::get_latest_view() const {
+  ReadView *view;
+
+  ut_ad(mutex_own(&trx_sys->mutex));
+
+  for (view = UT_LIST_GET_FIRST(m_views); view != nullptr;
+       view = UT_LIST_GET_NEXT(m_view_list, view)) {
+    if (!view->is_closed()) {
+      break;
+    }
+  }
+
+  return (view);
+}
+#endif /* J3VM */
 
 /**
 Copy state from another view. Must call copy_complete() to finish.
@@ -695,6 +766,87 @@ ulint MVCC::size() const {
 
   return (size);
 }
+
+#ifdef J3VM
+/* Get sequence number of latest view */
+void MVCC::get_latest_view_info(ib_uint64_t& seq_no, trx_id_t& trx_id) {
+  ReadView* latest_view;
+  trx_sys_mutex_enter();
+
+  latest_view = get_latest_view();
+  if (latest_view != nullptr) {
+    seq_no = latest_view->seq_no();
+    ut_a(seq_no >= 1);
+  } else {
+    seq_no = 0;
+  }
+  trx_id = trx_sys->max_trx_id;
+  trx_sys_mutex_exit();
+}
+
+/* Get sequence number of oldest view */
+void MVCC::get_oldest_view_info(ib_uint64_t& seq_no, trx_id_t& trx_id) {
+  ReadView* oldest_view;
+  trx_sys_mutex_enter();
+
+  oldest_view = get_oldest_view();
+  if (oldest_view != nullptr) {
+    seq_no = oldest_view->seq_no();
+    ut_a(seq_no >= 1);
+  } else {
+    seq_no = IB_UINT64_MAX;
+  }
+  if (!trx_sys->rw_trx_ids.empty()) {
+    trx_id = trx_sys->rw_trx_ids.front();
+  } else {
+    trx_id = trx_sys->max_trx_id;
+  }
+  trx_sys_mutex_exit();
+}
+void ReadView::copy_prepare_simple(const ReadView &other) {
+  ut_ad(&other != this);
+
+  if (!other.m_ids.empty()) {
+    const ids_t::value_type *p = other.m_ids.data();
+
+    m_ids.assign(p, p + other.m_ids.size());
+  } else {
+    m_ids.clear();
+  }
+
+  m_up_limit_id = other.m_up_limit_id;
+
+  m_low_limit_no = other.m_low_limit_no;
+
+  ut_d(m_view_low_limit_no = other.m_view_low_limit_no);
+
+  m_low_limit_id = other.m_low_limit_id;
+
+  m_creator_trx_id = other.m_creator_trx_id;
+}
+
+/**
+Complete the copy, insert the creator transaction id into the
+m_ids too and adjust the m_up_limit_id, if required */
+
+void ReadView::copy_complete_simple() {
+
+  if (m_creator_trx_id > 0) {
+    m_ids.insert(m_creator_trx_id);
+  }
+
+  if (!m_ids.empty()) {
+    /* The last active transaction has the smallest id. */
+    m_up_limit_id = std::min(m_ids.front(), m_up_limit_id);
+  }
+
+  ut_ad(m_up_limit_id <= m_low_limit_id);
+
+  /* We added the creator transaction ID to the m_ids. */
+  m_creator_trx_id = 0;
+}
+
+#endif /* J3VM */
 
 /**
 Close a view created by the above function.

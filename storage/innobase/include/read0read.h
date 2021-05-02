@@ -93,6 +93,10 @@ class MVCC {
   for views created by RW transactions. */
   static void set_view_creator_trx_id(ReadView *view, trx_id_t id);
 
+#ifdef J3VM
+  void get_latest_view_info(ib_uint64_t &seq_no, trx_id_t &trx_id);
+  void get_oldest_view_info(ib_uint64_t &seq_no, trx_id_t &trx_id);
+#endif /* J3VM */
  private:
   /**
   Validates a read view list. */
@@ -110,6 +114,9 @@ class MVCC {
   marked read views from the views list to the freed list.
   @return oldest view if found or NULL */
   inline ReadView *get_oldest_view() const;
+#ifdef J3VM
+  inline ReadView *get_latest_view() const;
+#endif /* J3VM */
   ReadView *get_view_created_by_trx_id(trx_id_t trx_id) const;
 
  private:
@@ -126,6 +133,11 @@ class MVCC {
   /** Active and closed views, the closed views will have the
   creator trx id set to TRX_ID_MAX */
   view_list_t m_views;
+
+#ifdef J3VM
+  /* m_view_seq_no >=1 */
+  ib_uint64_t m_view_seq_no;
+#endif /* J3VM */
 };
 
 #endif /* read0read_h */

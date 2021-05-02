@@ -122,6 +122,15 @@ B-tree page that is the leftmost page on its level
 was inserted/updated after an instant ADD COLUMN. */
 #define REC_INFO_INSTANT_FLAG 0x80UL
 
+#ifdef J3VM
+/* The toggle flag in info bits. When it is set to 1, it means this record
+is the committed(older) version in an index page. */
+#define REC_INFO_TOGGLE_FLAG 0x40UL
+
+/* 8-byte offset * 2 + sizeof(trx_id_t). */
+#define REC_PLEAF_EXTRA_SIZE 24 
+#endif
+
 /* Number of extra bytes in an old-style record,
 in addition to the data and the offsets */
 #define REC_N_OLD_EXTRA_BYTES 6
@@ -158,8 +167,13 @@ significant bit denotes that the tail of a field is stored off-page. */
 /* Length of the rec_get_offsets() header */
 #define REC_OFFS_HEADER_SIZE 4
 #else /* UNIV_DEBUG */
+#ifdef J3VM
+/* Length of the rec_get_offsets() header */
+#define REC_OFFS_HEADER_SIZE 4
+#else /* J3VM */
 /* Length of the rec_get_offsets() header */
 #define REC_OFFS_HEADER_SIZE 2
+#endif /* J3VM */
 #endif /* UNIV_DEBUG */
 
 /* Number of elements that should be initially allocated for the
@@ -258,6 +272,15 @@ UNIV_INLINE MY_ATTRIBUTE((warn_unused_result)) ulint
 }
 
 #ifdef UNIV_DEBUG
+#ifdef J3VM
+/** Check if the info bits are valid.
+@param[in]	bits	info bits to check
+@return true if valid */
+inline bool rec_info_bits_valid(ulint bits) {
+  return (0 == (bits & ~(REC_INFO_DELETED_FLAG | REC_INFO_MIN_REC_FLAG |
+                         REC_INFO_INSTANT_FLAG | REC_INFO_TOGGLE_FLAG)));
+}
+#else
 /** Check if the info bits are valid.
 @param[in]	bits	info bits to check
 @return true if valid */
@@ -265,6 +288,7 @@ inline bool rec_info_bits_valid(ulint bits) {
   return (0 == (bits & ~(REC_INFO_DELETED_FLAG | REC_INFO_MIN_REC_FLAG |
                          REC_INFO_INSTANT_FLAG)));
 }
+#endif
 #endif /* UNIV_DEBUG */
 
 /** The following function is used to retrieve the info bits of a record.
@@ -382,6 +406,65 @@ ulint rec_get_n_fields(const rec_t *rec,          /*!< in: physical record */
   }
 }
 
+#ifdef J3VM
+/** Check if a record is user record.
+@param[in]	rec	physical record
+@param[in]	index	index where the record resides
+@return	true if user record */ 
+UNIV_INLINE
+bool rec_is_user_rec(const rec_t* rec, const dict_index_t* index)
+{
+  ulint page_offset = ut_align_offset(rec, UNIV_PAGE_SIZE);
+
+  if (dict_table_is_comp(index->table))
+    return ((!strcmp(index->name, "PRIMARY")) &&
+            (strcmp(index->table_name, "sys/sys_config")) &&
+            (index->type == (DICT_CLUSTERED | DICT_UNIQUE)) &&
+            (index->space != dict_sys_t::s_space_id) &&
+            (rec_get_status(rec) == REC_STATUS_ORDINARY));
+  else  {
+    ut_a((rec_get_n_fields(rec, index) == 1 && 
+          (page_offset == PAGE_OLD_INFIMUM || 
+           page_offset == PAGE_OLD_SUPREMUM)) ||
+        (rec_get_n_fields(rec, index) != 1 && 
+         (page_offset != PAGE_OLD_INFIMUM && 
+          page_offset != PAGE_OLD_SUPREMUM)));
+    return ((!strcmp(index->name, "PRIMARY")) &&
+            (strcmp(index->table_name, "sys/sys_config")) &&
+            (index->type == (DICT_CLUSTERED | DICT_UNIQUE)) &&
+            (index->space != dict_sys_t::s_space_id) &&
+            ((ulint)rec_get_n_fields(rec, index) !=
+             (ulint)dict_index_get_n_unique_in_tree_nonleaf(index) + 1) &&
+            (page_offset != PAGE_OLD_INFIMUM && 
+             page_offset != PAGE_OLD_SUPREMUM));
+  }
+}
+
+UNIV_INLINE
+bool rec_is_user_rec(const dtuple_t* tuple, const dict_index_t* index)
+{
+  ulint rec_info;
+  rec_info = dtuple_get_info_bits(tuple);
+
+  if (dict_table_is_comp(index->table)) {
+
+    return ((!strcmp(index->name, "PRIMARY")) &&
+            (strcmp(index->table_name, "sys/sys_config")) &&
+            (index->type == (DICT_CLUSTERED | DICT_UNIQUE)) &&
+            (index->space != dict_sys_t::s_space_id) &&
+            ((rec_info & REC_NEW_STATUS_MASK) == REC_STATUS_ORDINARY));
+  } else {
+    ut_a(dtuple_get_n_fields(tuple) != 1);
+
+    return ((!strcmp(index->name, "PRIMARY")) &&
+            (strcmp(index->table_name, "sys/sys_config")) &&
+            (index->type == (DICT_CLUSTERED | DICT_UNIQUE)) &&
+            (dtuple_get_n_fields(tuple) !=
+             (ulint)dict_index_get_n_unique_in_tree_nonleaf(index) + 1) &&
+            (index->space != dict_sys_t::s_space_id));
+  }
+}
+#endif
 /** Confirms the n_fields of the entry is sane with comparing the other
 record in the same page specified
 @param[in]	index	index
@@ -505,7 +588,10 @@ UNIV_INLINE MY_ATTRIBUTE((warn_unused_result)) ibool rec_offs_validate(
   ulint comp = *rec_offs_base(offsets) & REC_OFFS_COMPACT;
 
   if (rec) {
+#ifdef J3VM
+#else
     ut_ad((ulint)rec == offsets[2]);
+#endif
     if (!comp && index != nullptr) {
       ut_a(rec_get_n_fields_old(rec, index) >= i);
     }
@@ -576,7 +662,25 @@ bool rec_offs_cmp(ulint *offsets1, ulint *offsets2);
 @return the output stream. */
 std::ostream &rec_offs_print(std::ostream &out, const ulint *offsets);
 #else
+
+#ifdef J3VM
+UNIV_INLINE
+void rec_offs_make_valid(
+    const rec_t *rec,          /*!< in: record */
+    const dict_index_t *index, /*!< in: record descriptor */
+    ulint *offsets)            /*!< in: array returned by
+                               rec_get_offsets() */
+{
+  ut_a(rec);
+  ut_a(index);
+  ut_a(offsets);
+  ut_a(rec_get_n_fields(rec, index) >= rec_offs_n_fields(offsets));
+  offsets[2] = (ulint)rec;
+  offsets[3] = (ulint)index;
+}
+#else
 #define rec_offs_make_valid(rec, index, offsets) ((void)0)
+#endif /* J3VM */
 #endif /* UNIV_DEBUG */
 
 /** The following function tells if a new-style record is instant record or not

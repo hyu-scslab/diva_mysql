@@ -40,6 +40,11 @@ Created 2018-01-27 by Sunny Bains */
 #include "row0vers.h"
 #include "ut0new.h"
 
+#ifdef J3VM
+#include "include/pleaf.h"
+#include "include/ebi_tree_buf.h"
+#endif
+
 #ifdef UNIV_PFS_THREAD
 mysql_pfs_key_t parallel_read_thread_key;
 #endif /* UNIV_PFS_THREAD */
@@ -354,7 +359,131 @@ bool Parallel_reader::Scan_ctx::check_visibility(const rec_t *&rec,
 
     if (m_config.m_index->is_clustered()) {
       trx_id_t rec_trx_id;
+#ifdef J3VM
+      trx_id_t old_rec_trx_id;
+      ulint toggle_flag;
+      ulint add_size;
+      const rec_t* old_rec;
+      const rec_t* recent_rec;
+      
+      if (rec_is_user_rec(rec, m_config.m_index)) {
+        toggle_flag = rec_get_toggle_flag(rec, 
+            dict_table_is_comp(m_config.m_index->table));
 
+        add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+
+        if (toggle_flag) {
+          recent_rec = rec + add_size;
+          old_rec = rec;
+        } else {
+          recent_rec = rec;
+          old_rec = rec + add_size;
+        }
+
+        if (m_config.m_index->trx_id_offset > 0) {
+          rec_trx_id = 
+            trx_read_trx_id(recent_rec + 
+                m_config.m_index->trx_id_offset);
+        } else {
+            rec_trx_id = row_get_rec_trx_id(
+                recent_rec, m_config.m_index, offsets);
+        }
+
+        if (m_trx->isolation_level> TRX_ISO_READ_UNCOMMITTED &&
+            !view->changes_visible(rec_trx_id, table_name)) {
+
+          if (!(*old_rec)) {
+            rec = nullptr;
+            return (false);
+          }
+
+          if (m_config.m_index->trx_id_offset > 0) {
+            old_rec_trx_id = trx_read_trx_id(
+                old_rec + m_config.m_index->trx_id_offset);
+          } else {
+            old_rec_trx_id = row_get_rec_trx_id(
+                old_rec, m_config.m_index, offsets);
+          }
+
+          if (!view->changes_visible(old_rec_trx_id, table_name)) {
+            rec_t* old_vers;
+            const rec_t* meta;
+            uint64_t left_offset, right_offset;
+            trx_id_t trx_id_bound;
+            int return_id;
+            byte* buf;
+            rec_t* return_rec_start;
+
+            meta = rec + rec_offs_data_size(offsets) + add_size;
+
+            ut_memcpy(&left_offset, meta, sizeof(uint64_t));
+
+            ut_memcpy(&right_offset, meta + sizeof(uint64_t), 
+                                              sizeof(uint64_t));
+
+            ut_memcpy(&trx_id_bound, meta + 2 * sizeof(uint64_t), 
+                                                  sizeof(uint64_t));
+            
+            if (left_offset == 0 && right_offset == 0) {
+              /* Nothing to read */
+              return_id = -1;
+            } else if (PLeafIsLeftLookup(left_offset, right_offset, 
+                                          trx_id_bound, view)) {
+              return_id = PLeafLookupTuple(left_offset, view,
+                  add_size, &return_rec_start);
+            } else {
+              return_id = PLeafLookupTuple(right_offset, view,
+                  add_size, &return_rec_start);
+            }
+
+            if (return_id == -1) {
+              rec = nullptr;
+              return (false);
+            } else {
+
+              buf = static_cast<byte *>(
+                  mem_heap_alloc(heap, add_size));
+              
+              old_vers = rec_copy(buf, 
+                  return_rec_start + rec_offs_extra_size(offsets), offsets);
+
+              offsets = rec_get_offsets(
+                  old_vers, m_config.m_index, offsets, ULINT_UNDEFINED, &heap); 
+
+              EbiTreeBufUnref(return_id);
+            }
+
+            ut_a(old_vers != nullptr);
+            rec = old_vers;
+          } else {
+            rec = old_rec;
+          }
+        } else {
+          rec = recent_rec;
+        }
+      } else {
+        if (m_config.m_index->trx_id_offset > 0) {
+          rec_trx_id = trx_read_trx_id(rec + m_config.m_index->trx_id_offset);
+        } else {
+          rec_trx_id = row_get_rec_trx_id(rec, m_config.m_index, offsets);
+        }
+
+        if (m_trx->isolation_level > TRX_ISO_READ_UNCOMMITTED &&
+            !view->changes_visible(rec_trx_id, table_name)) {
+          rec_t *old_vers;
+
+          row_vers_build_for_consistent_read(rec, mtr, m_config.m_index, &offsets,
+              view, &heap, heap, &old_vers,
+              nullptr, nullptr);
+
+          rec = old_vers;
+
+          if (rec == nullptr) {
+            return (false);
+          }
+        }
+      }
+#else
       if (m_config.m_index->trx_id_offset > 0) {
         rec_trx_id = trx_read_trx_id(rec + m_config.m_index->trx_id_offset);
       } else {
@@ -375,6 +504,7 @@ bool Parallel_reader::Scan_ctx::check_visibility(const rec_t *&rec,
           return (false);
         }
       }
+#endif /* J3VM */
     } else {
       /* Secondary index scan not supported yet. */
       ut_error;

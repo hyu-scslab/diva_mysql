@@ -118,6 +118,7 @@ void rec_init_offsets(const rec_t *rec,          /*!< in: physical record */
           the length to zero and enable the
           SQL NULL flag in offsets[]. */
           len = offs | REC_OFFS_SQL_NULL;
+
           goto resolved;
         }
         null_mask <<= 1;
@@ -366,6 +367,7 @@ void rec_get_offsets_reverse(
         the length to zero and enable the
         SQL NULL flag in offsets[]. */
         len = offs | REC_OFFS_SQL_NULL;
+
         goto resolved;
       }
       null_mask <<= 1;

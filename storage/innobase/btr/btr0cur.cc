@@ -94,6 +94,10 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <array>
 
+#ifdef J3VM
+#include "pleaf.h"
+#endif
+
 /** Buffered B-tree operation types, introduced as part of delete buffering. */
 enum btr_op_t {
   BTR_NO_OP = 0,               /*!< Not buffered */
@@ -2712,7 +2716,15 @@ dberr_t btr_cur_optimistic_insert(
   leaf = page_is_leaf(page);
 
   /* Calculate the record size when entry is converted to a record */
+#ifdef J3VM
+  if (rec_is_user_rec(entry, index)) {
+    rec_size = rec_get_converted_size(index, entry) * 2 + REC_PLEAF_EXTRA_SIZE;
+  } else {
+    rec_size = rec_get_converted_size(index, entry);
+  }
+#else
   rec_size = rec_get_converted_size(index, entry);
+#endif
 
   if (page_zip_rec_needs_ext(rec_size, page_is_comp(page),
                              dtuple_get_n_fields(entry), page_size)) {
@@ -2912,7 +2924,18 @@ dberr_t btr_cur_optimistic_insert(
                                     rec_size + PAGE_DIR_SLOT_SIZE);
     }
   }
+#ifdef J3VM
+  /* Initialize the right side of record */
+  if (*rec) {
+    if (rec_is_user_rec(*rec, index)) {
+      ulint add_size = 
+        rec_offs_data_size(*offsets) + rec_offs_extra_size(*offsets);
 
+      memset(*rec + rec_offs_data_size(*offsets), 0x00,
+          add_size + REC_PLEAF_EXTRA_SIZE);
+    }
+  }
+#endif
   *big_rec = big_rec_vec;
 
   return (DB_SUCCESS);
@@ -3061,11 +3084,263 @@ dberr_t btr_cur_pessimistic_insert(
     fil_space_release_free_extents(index->space, n_reserved);
   }
 
+#ifdef J3VM
+  /* Initialize the right side of record */
+  if (*rec) {
+    if (rec_is_user_rec(*rec, index)) {
+      ulint add_size = 
+        rec_offs_data_size(*offsets) + rec_offs_extra_size(*offsets);
+
+      memset(*rec + rec_offs_data_size(*offsets), 0x00,
+          add_size + REC_PLEAF_EXTRA_SIZE);
+    }
+  }
+#endif
   *big_rec = big_rec_vec;
 
   return (DB_SUCCESS);
 }
 
+#ifdef J3VM
+/*==================== UPDATE HELPER =========================*/
+#define DEFAULT_TOGGLE_TYPE			0x0UL
+#define UPDATE_TOGGLE_NORMAL		0x1UL
+#define SKIP_TOGGLE_NORMAL			0x2UL
+#define UPDATE_TOGGLE_ROLLBACK	0x3UL
+
+UNIV_INLINE void
+pleaf_append_if_needed(
+        rec_t* rec,
+        const ulint* offsets,
+        dict_index_t* index,
+        ulint toggle_flag)
+{
+  ulint add_size;
+  rec_t* old_rec;
+  rec_t* second_old_rec;
+  rec_t* meta;
+  bool is_left;
+  int ret_status;
+  uint64_t left_offset, right_offset;
+  trx_id_t old_trx_id, second_old_trx_id;
+  ulint tuple_len;
+
+  add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+  meta = rec + rec_offs_data_size(offsets) + add_size;
+  ut_memcpy(&left_offset, meta, sizeof(uint64_t));
+
+  ut_memcpy(&right_offset, meta + sizeof(uint64_t), 
+      sizeof(uint64_t));
+
+  if (toggle_flag) {
+    old_rec = rec + add_size;
+    second_old_rec = rec;
+  } else {
+    old_rec = rec;
+    second_old_rec = rec + add_size;
+  }
+
+  if (!(*second_old_rec))
+    return;
+
+  tuple_len = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+
+  old_trx_id = rec_get_trx_id(old_rec, index);
+  second_old_trx_id = rec_get_trx_id(second_old_rec, index);
+
+  if (old_trx_id == second_old_trx_id) {
+    /** This case is related to rollback(undo) situations. When trx executes
+      btr_update_in_place in rollback, it toggles a toggle flag and make both
+      sides identical. */
+    /* Nothing to do */
+  } else {
+    /** Before append tuple to pleaf, change meta fields if needed */
+    is_left = PLeafIsLeftUpdate(left_offset, right_offset, &ret_status);
+
+    switch (ret_status) {
+      case PLEAF_RESET:
+        /** If both generation number is not valid, reset all metadata */
+        memset(meta, 0x00, REC_PLEAF_EXTRA_SIZE);
+        break;
+      case PLEAF_SWITCH:
+        ut_memcpy(meta + sizeof(uint64_t) * 2, 
+            &second_old_trx_id, sizeof(trx_id_t));
+        break;
+      case PLEAF_NORMAL:
+        break;
+      default:
+        ut_a(false);
+    }
+
+    if (is_left) {
+      (void) PLeafAppendTuple(left_offset, 
+          reinterpret_cast<uint64_t*>(meta),
+          second_old_trx_id, old_trx_id, tuple_len,
+          second_old_rec - rec_offs_extra_size(offsets));
+    } else {
+      (void) PLeafAppendTuple(right_offset, 
+          reinterpret_cast<uint64_t*>(meta + sizeof(uint64_t)),
+          second_old_trx_id, old_trx_id, tuple_len,
+          second_old_rec - rec_offs_extra_size(offsets));
+    }
+  }
+}
+
+UNIV_INLINE bool
+btr_cur_update_in_recovery_or_rollback(
+        ulint flags,
+        const trx_t* trx)
+{
+  if (!(flags & (BTR_NO_LOCKING_FLAG | 
+          BTR_NO_UNDO_LOG_FLAG | BTR_KEEP_SYS_FLAG))) {
+    return false;
+  }
+
+  return (trx->is_recovered || !strcmp("rollback", trx->op_info));
+}
+
+UNIV_INLINE ulint
+btr_cur_get_toggle_type(
+        ulint flags,                /*!< in: locking flag */ 
+        const rec_t* rec,           /*!< in: record */
+        const trx_t* trx,           /*!< in: transaction */
+        const ulint* offsets,       /*!< in: rec_get_offsets(rec) */
+        const dict_index_t* index,  /*!< in: clustered index of the record */
+        trx_id_t trx_id)            /*!< in: transcation id */
+{
+  bool in_recovery_or_rollback;
+  trx_id_t old_trx_id;
+  ulint toggle_flag;
+  ulint add_size;
+
+  add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+  toggle_flag = rec_get_toggle_flag(rec, rec_offs_comp(offsets)); 
+  in_recovery_or_rollback = btr_cur_update_in_recovery_or_rollback(flags, trx);
+
+  if (toggle_flag) {
+    old_trx_id = rec_get_trx_id(rec + add_size, index);
+  } else {
+    old_trx_id = rec_get_trx_id(rec, index);
+  }
+
+  /* We allow repeatable update in the same index page. This should be handled
+   carefully in some situations. */
+  if (in_recovery_or_rollback) {
+    /* In recovery or rollback */
+    if (trx_id == old_trx_id) {
+      return UPDATE_TOGGLE_ROLLBACK;
+    } else {
+      /* We only write an undo log in the first time 
+       if it is a repeatable update */
+      ut_a(false);
+    }
+  } else {
+    /* In normal update */
+    if (trx_id != old_trx_id) {
+      /* First update */
+      return UPDATE_TOGGLE_NORMAL;
+    } else {
+      /* Repeatable update */
+      return SKIP_TOGGLE_NORMAL;
+    }
+  }
+  ut_a(false);
+  return DEFAULT_TOGGLE_TYPE;
+}
+
+/** Writes the redo log record for toggle marking or unmarking of an index
+ record. */
+UNIV_INLINE
+void btr_cur_tog_mark_set_clust_rec_log(
+    rec_t *rec,          /*!< in: record */
+    dict_index_t *index, /*!< in: index of the record */
+    mtr_t *mtr)          /*!< in: mtr */
+{
+  ulint toggle_flag;
+  byte *log_ptr = nullptr;
+
+  ut_ad(!!page_rec_is_comp(rec) == dict_table_is_comp(index->table));
+
+  const bool opened = mlog_open_and_write_index(
+      mtr, rec, index,
+      page_rec_is_comp(rec) ? MLOG_COMP_REC_CLUST_TOGGLE_MARK
+                            : MLOG_REC_CLUST_TOGGLE_MARK,
+                            1 + 1 + 2, log_ptr);
+
+  if (!opened) {
+    /* Logging in mtr is switched off during crash recovery */
+    return;
+  }
+
+  toggle_flag = rec_get_toggle_flag(rec, page_rec_is_comp(rec));
+
+  *log_ptr++ = 0;
+  
+  if (toggle_flag) {
+    *log_ptr++ = 1;
+  } else {
+    *log_ptr++ = 1;
+  }
+
+  mach_write_to_2(log_ptr, page_offset(rec));
+  log_ptr += 2;
+
+  mlog_close(mtr, log_ptr);
+}
+
+/** Parses the redo log record for toggle marking or unmarking of a clustered
+ index record.
+ @return end of log record or NULL */
+byte *btr_cur_parse_tog_mark_set_clust_rec(
+    byte *ptr,                /*!< in: buffer */
+    byte *end_ptr,            /*!< in: buffer end */
+    page_t *page,             /*!< in/out: page or NULL */
+    page_zip_des_t *page_zip, /*!< in/out: compressed page, or NULL */
+    dict_index_t *index)      /*!< in: index corresponding to page */
+{
+  ulint val;
+  ulint offset;
+  rec_t *rec;
+
+  ut_ad(!page || !!page_is_comp(page) == dict_table_is_comp(index->table));
+
+  if (end_ptr < ptr + 2) {
+    return (nullptr);
+  }
+
+  /* flags. */
+  ptr++;
+  val = mach_read_from_1(ptr);
+  ptr++;
+
+  if (ptr == nullptr) {
+    return (nullptr);
+  }
+
+  if (end_ptr < ptr + 2) {
+    return (nullptr);
+  }
+
+  offset = mach_read_from_2(ptr);
+  ptr += 2;
+
+  ut_a(offset <= UNIV_PAGE_SIZE);
+
+  if (page) {
+    rec = page + offset;
+
+    /* We do not need to reserve search latch, as the page
+    is only being recovered, and there cannot be a hash index to
+    it. Besides, these fields are being updated in place
+    and the adaptive hash index does not depend on them. */
+
+    btr_rec_set_toggle_flag(rec, page_zip, val);
+  }
+
+  return (ptr);
+}
+
+#endif
 /*==================== B-TREE UPDATE =========================*/
 
 /** For an update, checks the locks and does the undo logging.
@@ -3197,6 +3472,11 @@ byte *btr_cur_parse_update_in_place(
   ulint rec_offset;
   mem_heap_t *heap;
   ulint *offsets;
+#ifdef J3VM
+  ulint toggle_flag;
+  ulint add_size;
+  rec_t *old_rec;
+#endif
 
   if (end_ptr < ptr + 1) {
     return (nullptr);
@@ -3236,6 +3516,29 @@ byte *btr_cur_parse_update_in_place(
 
   offsets = rec_get_offsets(rec, index, nullptr, ULINT_UNDEFINED, &heap);
 
+#ifdef J3VM
+  /* In SIRO-versioning, we must copy other-side record before redoing.
+   We should check transaction id because we allow repeatable-update in the
+   same record space. */
+  if (rec_is_user_rec(rec, index)) {
+    toggle_flag = rec_get_toggle_flag(rec, page_is_comp(page));
+    add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+
+    if (toggle_flag) {
+      old_rec = rec;
+      rec = rec + add_size;
+    } else {
+      old_rec = rec + add_size;
+    }
+
+    if (rec_get_trx_id(rec, index) != trx_id) {
+      ut_memcpy(rec - rec_offs_extra_size(offsets), 
+          old_rec - rec_offs_extra_size(offsets), add_size);
+    } else {
+      /* Nothing to do. Repeatable-update */
+    }
+  }
+#endif
   if (!(flags & BTR_KEEP_SYS_FLAG)) {
     row_upd_rec_sys_fields_in_recovery(rec, page_zip, offsets, pos, trx_id,
                                        roll_ptr);
@@ -3300,7 +3603,10 @@ bool btr_cur_update_alloc_zip_func(
     goto out_of_space;
   }
 
+#if defined(J3VM) && !defined(UNIV_DEBUG)
+#else
   rec_offs_make_valid(page_cur_get_rec(cursor), index, offsets);
+#endif
 
   /* After recompressing a page, we must make sure that the free
   bits in the insert buffer bitmap will not exceed the free
@@ -3355,6 +3661,12 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   roll_ptr_t roll_ptr = 0;
   ulint was_delete_marked;
   ibool is_hashed;
+#ifdef J3VM
+  ulint add_size;
+  ulint toggle_type;
+  ulint toggle_flag;
+  ulint is_delete_marked;
+#endif
 
   rec = btr_cur_get_rec(cursor);
   index = cursor->index;
@@ -3394,9 +3706,35 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
     rec = btr_cur_get_rec(cursor);
   }
 
+#ifdef J3VM
+  /* Cursor(rec) should point to left-version in SIRO-versioning. */
+  toggle_type = DEFAULT_TOGGLE_TYPE;
+
+  if (rec_is_user_rec(rec, index)) {
+    /* Get toggle type and toggle flag. See btr_cur_get_toggle_type(). */
+    toggle_type = btr_cur_get_toggle_type(
+        flags, rec, thr_get_trx(thr), offsets, index, trx_id);
+
+    toggle_flag =
+      rec_get_toggle_flag(rec, page_is_comp(buf_block_get_frame(block)));
+  }
+
+  if (toggle_type == SKIP_TOGGLE_NORMAL) {
+    /* In repeatable-update, no need to write an undo log record */
+    err = btr_cur_upd_lock_and_undo(flags | BTR_NO_UNDO_LOG_FLAG, 
+                                          cursor, offsets, update, 
+                                          cmpl_info, thr, mtr, &roll_ptr);
+
+  } else {
+    /* Do lock checking and undo logging */
+    err = btr_cur_upd_lock_and_undo(flags, cursor, offsets, update, cmpl_info,
+                                    thr, mtr, &roll_ptr);
+  }
+#else
   /* Do lock checking and undo logging */
   err = btr_cur_upd_lock_and_undo(flags, cursor, offsets, update, cmpl_info,
                                   thr, mtr, &roll_ptr);
+#endif
   if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
     /* We may need to update the IBUF_BITMAP_FREE
     bits after a reorganize that was done in
@@ -3404,14 +3742,86 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
     goto func_exit;
   }
 
+
+#ifdef J3VM
+  add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+
+  if (rec_is_user_rec(rec, index) && toggle_type == UPDATE_TOGGLE_NORMAL) {
+    pleaf_append_if_needed(rec, offsets, index, toggle_flag); 
+  }
+
+  /* Set toggle flag in here. We must gurantee toggle flag is set to position 
+   to update after this point. */
+  if (rec_is_user_rec(rec, index) && 
+      (toggle_type == UPDATE_TOGGLE_NORMAL || 
+       toggle_type == UPDATE_TOGGLE_ROLLBACK)) {
+    if (toggle_flag) {
+      btr_rec_set_toggle_flag(rec, page_zip, FALSE);
+    } else {
+      btr_rec_set_toggle_flag(rec, page_zip, TRUE);
+    }
+
+    /* Read toggle_flag after modifing. */ 
+    toggle_flag = 
+        rec_get_toggle_flag(rec, page_is_comp(buf_block_get_frame(block)));
+  }
+
+  /* !!! In rollback or recovery, we have to copy rec tuple after setting toggle
+   flag. */
+
+  if (!(flags & BTR_KEEP_SYS_FLAG) && !index->table->is_intrinsic()) {
+    if (rec_is_user_rec(rec, index)) {
+      if (toggle_type == UPDATE_TOGGLE_ROLLBACK) {
+        if (toggle_flag) {
+          ut_memcpy(rec - rec_offs_extra_size(offsets),
+              rec + add_size - rec_offs_extra_size(offsets), add_size);
+        } else {
+          ut_memcpy(rec + add_size - rec_offs_extra_size(offsets),
+              rec - rec_offs_extra_size(offsets), add_size);
+        }
+      } else if (toggle_type != UPDATE_TOGGLE_NORMAL) {
+        /* Nothing to do */
+      } else if (toggle_flag) {
+        ut_memcpy(rec + add_size - rec_offs_extra_size(offsets), 
+            rec - rec_offs_extra_size(offsets), add_size);
+
+        row_upd_rec_sys_fields(rec + add_size, nullptr, index, offsets, 
+                                thr_get_trx(thr), roll_ptr);
+      } else {
+        ut_memcpy(rec - rec_offs_extra_size(offsets), 
+            rec + add_size - rec_offs_extra_size(offsets), add_size);
+
+        row_upd_rec_sys_fields(rec, nullptr, index, offsets, 
+                                thr_get_trx(thr), roll_ptr);
+      }
+    } else {
+      row_upd_rec_sys_fields(rec, nullptr, index, offsets, thr_get_trx(thr),
+                             roll_ptr);
+    }
+  }
+
+  if (rec_is_user_rec(rec, index)) {
+    /* Get the recent version's delete mark */
+    if (toggle_flag) {
+      was_delete_marked = 
+          rec_get_deleted_flag(rec, page_is_comp(buf_block_get_frame(block)));
+    } else {
+      was_delete_marked = 
+          rec_get_deleted_flag(rec + add_size, 
+              page_is_comp(buf_block_get_frame(block)));
+    }
+  } else {
+    was_delete_marked = 
+        rec_get_deleted_flag(rec, page_is_comp(buf_block_get_frame(block)));
+  }
+#else
   if (!(flags & BTR_KEEP_SYS_FLAG) && !index->table->is_intrinsic()) {
     row_upd_rec_sys_fields(rec, nullptr, index, offsets, thr_get_trx(thr),
                            roll_ptr);
   }
-
   was_delete_marked =
       rec_get_deleted_flag(rec, page_is_comp(buf_block_get_frame(block)));
-
+#endif
   is_hashed = (block->index != nullptr);
 
   if (is_hashed) {
@@ -3434,12 +3844,75 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   }
 
   assert_block_ahi_valid(block);
+#ifdef J3VM
+  if (rec_is_user_rec(rec, index)) {
+    if (toggle_type == UPDATE_TOGGLE_ROLLBACK) {
+      /* Nothing to do */
+    } else if (toggle_flag) {
+      row_upd_rec_in_place(rec + add_size, index, offsets, update, page_zip);
+    } else {
+      row_upd_rec_in_place(rec, index, offsets, update, page_zip);
+    }
+  } else {
+    row_upd_rec_in_place(rec, index, offsets, update, page_zip);
+  }
+
+  if (rec_is_user_rec(rec, index) && 
+      (toggle_type == UPDATE_TOGGLE_NORMAL || 
+       toggle_type == UPDATE_TOGGLE_ROLLBACK)) {
+    /* In row_upd_rec_in_place(), toggle flag could be initialized */
+    if (toggle_flag) {
+      btr_rec_set_toggle_flag(rec, page_zip, TRUE);
+    } else {
+      btr_rec_set_toggle_flag(rec, page_zip, FALSE);
+    }
+
+    /* Write a redo log for toggle flag before writing a redo log for update.
+     This order must be gauranteed. */
+    btr_cur_tog_mark_set_clust_rec_log(rec, index, mtr);
+  }
+#else
   row_upd_rec_in_place(rec, index, offsets, update, page_zip);
+#endif
 
   if (is_hashed) {
     rw_lock_x_unlock(btr_get_search_latch(index));
   }
 
+#ifdef J3VM
+  /* When we write a redo log for update, we don't care about SIRO-versioning.
+   However, when we parse a redo log in here, we do care about it seriously. */
+  btr_cur_update_in_place_log(flags, rec, index, update, trx_id, roll_ptr, mtr);
+
+  if (toggle_flag) {
+    is_delete_marked = rec_get_deleted_flag(
+          rec + add_size, page_is_comp(buf_block_get_frame(block)));
+  } else {
+    is_delete_marked = rec_get_deleted_flag(
+          rec, page_is_comp(buf_block_get_frame(block)));
+  }
+
+  if (rec_is_user_rec(rec, index)) {
+    if (toggle_type == SKIP_TOGGLE_NORMAL) {
+      /* Nothing to do */
+    } else if (was_delete_marked && !is_delete_marked) {
+      /* The new updated record owns its possible externally
+      stored fields */
+  
+      lob::BtrContext btr_ctx(mtr, nullptr, index, rec, offsets, block);
+      btr_ctx.unmark_extern_fields();
+    }
+  } else {
+    if (was_delete_marked &&
+        !rec_get_deleted_flag(rec, page_is_comp(buf_block_get_frame(block)))) {
+      /* The new updated record owns its possible externally
+      stored fields */
+  
+      lob::BtrContext btr_ctx(mtr, nullptr, index, rec, offsets, block);
+      btr_ctx.unmark_extern_fields();
+    }
+  }
+#else
   btr_cur_update_in_place_log(flags, rec, index, update, trx_id, roll_ptr, mtr);
 
   if (was_delete_marked &&
@@ -3450,7 +3923,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
     lob::BtrContext btr_ctx(mtr, nullptr, index, rec, offsets, block);
     btr_ctx.unmark_extern_fields();
   }
-
+#endif
   ut_ad(err == DB_SUCCESS);
 
 func_exit:
@@ -3460,6 +3933,12 @@ func_exit:
     ibuf_update_free_bits_zip(block, mtr);
   }
 
+#if defined J3VM && defined UNIV_DEBUG
+  if (rec_is_user_rec(rec, index)) {
+    ut_ad(rec_offs_validate(rec, index, offsets));
+    ut_ad(rec_offs_validate(rec + add_size, index, offsets));
+  }
+#endif
   return (err);
 }
 
@@ -3842,6 +4321,13 @@ dberr_t btr_cur_pessimistic_update(ulint flags, btr_cur_t *cursor,
 
   rec = btr_cur_get_rec(cursor);
 
+#ifdef J3VM
+  /* We forbid these cases */
+  if (rec_is_user_rec(rec, index)) {
+    rec_print(stderr, rec, index);
+    ut_a(false);
+  }
+#endif
   *offsets =
       rec_get_offsets(rec, index, *offsets, ULINT_UNDEFINED, offsets_heap);
 
@@ -4285,6 +4771,10 @@ dberr_t btr_cur_del_mark_set_clust_rec(
   dberr_t err;
   page_zip_des_t *page_zip;
   trx_t *trx;
+#ifdef J3VM
+  ulint add_size;
+  ulint toggle_flag;
+#endif
 
   ut_ad(index->is_clustered());
   ut_ad(rec_offs_validate(rec, index, offsets));
@@ -4292,12 +4782,31 @@ dberr_t btr_cur_del_mark_set_clust_rec(
   ut_ad(buf_block_get_frame(block) == page_align(rec));
   ut_ad(page_is_leaf(page_align(rec)));
 
+#ifdef J3VM
+  toggle_flag = rec_get_toggle_flag(rec, rec_offs_comp(offsets));
+  add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+
+  /* While cascading delete operations, they don't write logs(undo & redo). */
+  if (toggle_flag) {
+    if (rec_get_deleted_flag(rec + add_size, rec_offs_comp(offsets))) {
+      /* While cascading delete operations, this becomes possible. */
+      ut_ad(rec_get_trx_id(rec + add_size, index) == thr_get_trx(thr)->id);
+      return (DB_SUCCESS);
+    }
+  } else {
+    if (rec_get_deleted_flag(rec, rec_offs_comp(offsets))) {
+      /* While cascading delete operations, this becomes possible. */
+      ut_ad(rec_get_trx_id(rec, index) == thr_get_trx(thr)->id);
+      return (DB_SUCCESS);
+    }
+  }
+#else
   if (rec_get_deleted_flag(rec, rec_offs_comp(offsets))) {
     /* While cascading delete operations, this becomes possible. */
     ut_ad(rec_get_trx_id(rec, index) == thr_get_trx(thr)->id);
     return (DB_SUCCESS);
   }
-
+#endif
   err = lock_clust_rec_modify_check_and_lock(BTR_NO_LOCKING_FLAG, block, rec,
                                              index, offsets, thr);
 
@@ -4318,7 +4827,35 @@ dberr_t btr_cur_del_mark_set_clust_rec(
 
   page_zip = buf_block_get_page_zip(block);
 
+#ifdef J3VM
+  if (rec_is_user_rec(rec, index)) {
+    pleaf_append_if_needed(rec, offsets, index, toggle_flag);
+    /* Set toggle flag, and then set delete flag.
+     Same as writing redo logs. */
+    if (toggle_flag) {
+      btr_rec_set_toggle_flag(rec, page_zip, FALSE);
+    } else {
+      btr_rec_set_toggle_flag(rec, page_zip, TRUE);
+    }
+
+    /* Read toggle flag after modifing. */
+    toggle_flag = rec_get_toggle_flag(rec, rec_offs_comp(offsets)); 
+
+    if (toggle_flag) {
+      ut_memcpy(rec + add_size - rec_offs_extra_size(offsets), 
+          rec - rec_offs_extra_size(offsets), add_size);
+      btr_rec_set_deleted_flag(rec + add_size, page_zip, TRUE);
+    } else {
+      ut_memcpy(rec - rec_offs_extra_size(offsets), 
+          rec + add_size - rec_offs_extra_size(offsets), add_size);
+      btr_rec_set_deleted_flag(rec, page_zip, TRUE);
+    }
+  } else {
+    btr_rec_set_deleted_flag(rec, page_zip, TRUE);
+  }
+#else
   btr_rec_set_deleted_flag(rec, page_zip, TRUE);
+#endif
 
   /* For intrinsic table, roll-ptr is not maintained as there is no UNDO
   logging. Skip updating it. */
@@ -4341,9 +4878,35 @@ dberr_t btr_cur_del_mark_set_clust_rec(
     row_log_table_delete(trx, rec, entry, index, offsets, nullptr);
   }
 
+#ifdef J3VM
+  if (rec_is_user_rec(rec, index)) {
+    /* Write a redo log for toggle flag. */
+    btr_cur_tog_mark_set_clust_rec_log(rec, index, mtr);
+  }
+
+  if (toggle_flag) {
+    row_upd_rec_sys_fields(
+        rec + add_size, page_zip, index, offsets, trx, roll_ptr);
+  
+    btr_cur_del_mark_set_clust_rec_log(
+        rec + add_size, index, trx->id, roll_ptr, mtr);
+  } else {
+    row_upd_rec_sys_fields(rec, page_zip, index, offsets, trx, roll_ptr);
+  
+    btr_cur_del_mark_set_clust_rec_log(rec, index, trx->id, roll_ptr, mtr);
+  }
+#else
   row_upd_rec_sys_fields(rec, page_zip, index, offsets, trx, roll_ptr);
 
   btr_cur_del_mark_set_clust_rec_log(rec, index, trx->id, roll_ptr, mtr);
+#endif
+
+#if defined J3VM && defined UNIV_DEBUG
+  if (rec_is_user_rec(rec, index)) {
+    ut_ad(rec_offs_validate(rec, index, offsets));
+    ut_ad(rec_offs_validate(rec + add_size, index, offsets));
+  }
+#endif
 
   return (err);
 }

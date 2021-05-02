@@ -1568,7 +1568,18 @@ ib_err_t ib_cursor_delete_row(
       the rec. */
       offsets = rec_get_offsets(rec, index, offsets, ULINT_UNDEFINED, &heap);
       ut_ad(rec_offs_size(offsets) < UNIV_PAGE_SIZE_MAX);
+
+#ifdef J4VM
+      /* TODO: It doesn't work for now. When we check deleted flag, 
+      we must check toggle flag first in SIRO-versioning */
+      if (rec_is_user_rec(rec, index)) {
+        copy = rec_copy_special(ptr, rec, offsets);
+      } else {
+        copy = rec_copy(ptr, rec, offsets);
+      }
+#else
       copy = rec_copy(ptr, rec, offsets);
+#endif
     }
 
     mtr_commit(&mtr);

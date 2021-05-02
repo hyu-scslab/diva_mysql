@@ -244,8 +244,19 @@ enum mlog_id_t {
   /** Extend the space */
   MLOG_FILE_EXTEND = 65,
 
+#ifdef J3VM
+  /** Mark clustered index record toggle */
+  MLOG_REC_CLUST_TOGGLE_MARK = 66,
+
+  /** mark compact clustered index record toggle */
+  MLOG_COMP_REC_CLUST_TOGGLE_MARK = 67,
+
+  /** Used in tests of redo log. It must never be used outside unit tests. */
+  MLOG_TEST = 68,
+#else
   /** Used in tests of redo log. It must never be used outside unit tests. */
   MLOG_TEST = 66,
+#endif
 
   /** biggest value (used in assertions) */
   MLOG_BIGGEST_TYPE = MLOG_TEST

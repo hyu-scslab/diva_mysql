@@ -885,12 +885,19 @@ static ulint trx_undo_insert_header_reuse(
 
   new_free = free + TRX_UNDO_LOG_OLD_HDR_SIZE;
 
+#ifdef J3VM
+  /* Insert & update undo data is not needed after commit: we may free all
+  the space on the page. ** ONLY IN SIRO-VERSIONING ** */
+  ut_a(mach_read_from_2(undo_page + TRX_UNDO_PAGE_HDR + TRX_UNDO_PAGE_TYPE) ==
+       TRX_UNDO_INSERT || mach_read_from_2(undo_page + TRX_UNDO_PAGE_HDR +
+         TRX_UNDO_PAGE_TYPE) == TRX_UNDO_UPDATE);
+
+#else
   /* Insert undo data is not needed after commit: we may free all
   the space on the page */
-
   ut_a(mach_read_from_2(undo_page + TRX_UNDO_PAGE_HDR + TRX_UNDO_PAGE_TYPE) ==
        TRX_UNDO_INSERT);
-
+#endif
   mach_write_to_2(page_hdr + TRX_UNDO_PAGE_START, new_free);
 
   mach_write_to_2(page_hdr + TRX_UNDO_PAGE_FREE, new_free);
@@ -1668,7 +1675,12 @@ static trx_undo_t *trx_undo_reuse_cached(trx_t *trx, trx_rseg_t *rseg,
     ut_a(mach_read_from_2(undo_page + TRX_UNDO_PAGE_HDR + TRX_UNDO_PAGE_TYPE) ==
          TRX_UNDO_UPDATE);
 
+#ifdef J3VM
+    /* Same routine as TRX_UNDO_INSERT. ** ONLY IN SIRO-VERSIONING ** */
+    offset = trx_undo_insert_header_reuse(undo_page, trx_id, mtr);
+#else
     offset = trx_undo_header_create(undo_page, trx_id, mtr);
+#endif
   }
 
   trx_undo_header_add_space_for_xid(undo_page, undo_page + offset, mtr,
@@ -1839,7 +1851,12 @@ page_t *trx_undo_set_state_at_finish(
   } else if (undo->type == TRX_UNDO_INSERT) {
     state = TRX_UNDO_TO_FREE;
   } else {
+#ifdef J3VM
+    /** Always make state TRX_UNDO_CACHED. See trx_undo_cleanup_force(). */
+    state = TRX_UNDO_CACHED;
+#else
     state = TRX_UNDO_TO_PURGE;
+#endif /* J3VM */
   }
 
   undo->state = state;
@@ -1977,6 +1994,49 @@ void trx_undo_insert_cleanup(trx_undo_ptr_t *undo_ptr, bool noredo) {
 
   rseg->unlatch();
 }
+
+#ifdef J3VM
+/** Frees an update undo log after a transaction commit or rollback.
+Knowledge of updates is not needed after a commit or rollback, therefore
+the data can be discarded. ** ONLY IN SIRO-VERSIONING **
+@param[in,out]	undo_ptr	undo log to clean up
+@param[in]	noredo		whether the undo tablespace is redo logged */
+void trx_undo_update_cleanup_force(trx_t *trx,
+    trx_undo_ptr_t *undo_ptr, bool noredo) {
+  trx_undo_t *undo;
+  trx_rseg_t *rseg;
+  mtr_t mtr;
+
+  undo = undo_ptr->update_undo;
+  ut_ad(undo != nullptr);
+
+  rseg = undo_ptr->rseg;
+
+  ut_ad(noredo == fsp_is_system_temporary(rseg->space_id));
+
+  mtr_start(&mtr);
+
+  rseg->latch();
+
+  UT_LIST_REMOVE(rseg->update_undo_list, undo);
+  undo_ptr->update_undo = nullptr;
+
+  ut_a(undo->state == TRX_UNDO_CACHED);
+
+  /** Only reuse header page */
+  while (undo->size != 1) {
+    trx_undo_free_last_page(trx, undo, &mtr);
+    rseg->unlatch();
+    rseg->latch();
+  }
+
+  UT_LIST_ADD_FIRST(rseg->update_undo_cached, undo);
+
+  MONITOR_INC(MONITOR_NUM_UNDO_SLOT_CACHED);
+  rseg->unlatch();
+  mtr_commit(&mtr);
+}
+#endif
 
 void trx_undo_free_trx_with_prepared_or_active_logs(trx_t *trx,
                                                     ulint expected_undo_state) {

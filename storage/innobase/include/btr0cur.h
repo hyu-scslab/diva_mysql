@@ -621,6 +621,25 @@ void btr_cur_set_deleted_flag_for_ibuf(
 UNIV_INLINE
 void btr_rec_set_deleted_flag(rec_t *rec, page_zip_des_t *page_zip, ulint flag);
 
+#ifdef J3VM
+/** The following function is used to set the toggle bit of a record.
+@param[in,out]	rec		physical record
+@param[in,out]	page_zip	compressed page (or NULL)
+@param[in]	flag		nonzero if toggle marked */
+UNIV_INLINE
+void btr_rec_set_toggle_flag(rec_t *rec, page_zip_des_t *page_zip, ulint flag);
+
+/** Parses the redo log record for toggle marking or unmarking of a
+ clustered index record.
+ @return end of log record or NULL */
+byte *btr_cur_parse_tog_mark_set_clust_rec(
+    byte *ptr,                /*!< in: buffer */
+    byte *end_ptr,            /*!< in: buffer end */
+    page_t *page,             /*!< in/out: page or NULL */
+    page_zip_des_t *page_zip, /*!< in/out: compressed page, or NULL */
+    dict_index_t *index);     /*!< in: index corresponding to page */
+
+#endif
 /** Latches the leaf page or pages requested.
 @param[in]	block		Leaf page where the search converged
 @param[in]	page_id		Page id of the leaf

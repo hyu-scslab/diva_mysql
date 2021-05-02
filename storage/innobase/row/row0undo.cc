@@ -189,8 +189,11 @@ bool row_undo_search_clust_to_pcur(
   found = row_get_rec_roll_ptr(rec, clust_index, offsets) == node->roll_ptr;
 
   if (found) {
+#ifdef J3VM
+    /* JAESEON: TODO */
+#else
     ut_ad(row_get_rec_trx_id(rec, clust_index, offsets) == node->trx->id);
-
+#endif
     if (dict_table_has_atomic_blobs(node->table)) {
       /* There is no prefix of externally stored
       columns in the clustered index record. Build a

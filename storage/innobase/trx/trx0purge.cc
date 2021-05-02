@@ -2269,6 +2269,9 @@ ulint trx_purge(ulint n_purge_threads, /*!< in: number of purge tasks
                                        to purge in one batch */
                 bool truncate)         /*!< in: truncate history if true */
 {
+#ifdef J3VM
+  return (0);
+#endif
   que_thr_t *thr = nullptr;
   ulint n_pages_handled;
 

@@ -279,6 +279,16 @@ the data can be discarded.
 @param[in]	noredo		whether the undo tablespace is redo logged */
 void trx_undo_insert_cleanup(trx_undo_ptr_t *undo_ptr, bool noredo);
 
+#ifdef J3VM
+/** Frees an update undo log after a transaction commit or rollback.
+Knowledge of updates is not needed after a commit or rollback, therefore
+the data can be discarded. ** ONLY IN SIRO-VERSIONING **
+@param[in,out]	undo_ptr	undo log to clean up
+@param[in]	noredo		whether the undo tablespace is redo logged */
+void trx_undo_update_cleanup_force(
+    trx_t *trx, trx_undo_ptr_t *undo_ptr, bool noredo);
+
+#endif
 /** At shutdown, frees the undo logs of a transaction which was either
 PREPARED or (ACTIVE and recovered).
 @param[in]  trx                   transation which undo logs are freed

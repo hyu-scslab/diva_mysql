@@ -2264,6 +2264,25 @@ static byte *recv_parse_or_apply_log_rec_body(
 
       break;
 
+#ifdef J3VM
+    case MLOG_REC_CLUST_TOGGLE_MARK:
+    case MLOG_COMP_REC_CLUST_TOGGLE_MARK:
+
+      ut_ad(!page || fil_page_type_is_index(page_type));
+
+      if (nullptr != (ptr = mlog_parse_index(
+                          ptr, end_ptr, type == MLOG_COMP_REC_CLUST_TOGGLE_MARK,
+                          &index))) {
+        ut_a(!page ||
+             (ibool) !!page_is_comp(page) == dict_table_is_comp(index->table));
+
+        ptr = btr_cur_parse_tog_mark_set_clust_rec(ptr, end_ptr, page, page_zip,
+                                                   index);
+      }
+
+      break;
+#endif
+
     case MLOG_TEST:
 #ifndef UNIV_HOTBACKUP
       if (log_test != nullptr) {
@@ -4236,6 +4255,13 @@ const char *get_mlog_string(mlog_id_t type) {
     case MLOG_COMP_PAGE_CREATE_SDI:
       return ("MLOG_COMP_PAGE_CREATE_SDI");
 
+#ifdef J3VM
+    case MLOG_REC_CLUST_TOGGLE_MARK:
+      return ("MLOG_REC_CLUST_TOGGLE_MARK");
+
+    case MLOG_COMP_REC_CLUST_TOGGLE_MARK:
+      return ("MLOG_COMP_REC_CLUST_TOGGLE_MARK");
+#endif
     case MLOG_TEST:
       return ("MLOG_TEST");
   }

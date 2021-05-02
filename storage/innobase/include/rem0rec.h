@@ -176,6 +176,29 @@ UNIV_INLINE
 bool rec_get_node_ptr_flag(const rec_t *rec) /*!< in: physical record */
     MY_ATTRIBUTE((warn_unused_result));
 
+#ifdef J3VM
+/** The following function tells if record is toggle marked.
+ @return nonzero if toggle marked */
+UNIV_INLINE
+ulint rec_get_toggle_flag(const rec_t *rec, /*!< in: physical record */
+                           ulint comp) /*!< in: nonzero=compact page format */
+    MY_ATTRIBUTE((warn_unused_result));
+
+/** The following function is used to set the toggle bit.
+@param[in]	rec		old-style physical record
+@param[in]	flag		nonzero if toggle marked */
+UNIV_INLINE
+void rec_set_toggle_flag_old(rec_t *rec, ulint flag);
+
+/** The following function is used to set the toggle bit.
+@param[in,out]	rec		new-style physical record
+@param[in,out]	page_zip	compressed page, or NULL
+@param[in]	flag		nonzero if toggle marked */
+UNIV_INLINE
+void rec_set_toggle_flag_new(rec_t *rec, page_zip_des_t *page_zip, ulint flag);
+
+#endif
+
 /** The following function is used to get the order number of an old-style
 record in the heap of the index page.
 @param[in]	rec	physical record
@@ -565,7 +588,10 @@ byte *rec_get_end(
 @return pointer to the origin of the copy */
 UNIV_INLINE
 rec_t *rec_copy(void *buf, const rec_t *rec, const ulint *offsets);
-
+#ifdef J3VM
+UNIV_INLINE
+rec_t *rec_copy_special(void *buf, const rec_t *rec, const ulint *offsets);
+#endif /* J3VM */
 #ifndef UNIV_HOTBACKUP
 /** Determines the size of a data tuple prefix in a temporary file.
  @return total size */

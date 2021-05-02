@@ -1393,6 +1393,9 @@ static bool trx_serialisation_number_get(
     added_trx_no = false;
   }
 
+#ifdef J3VM
+  trx_sys_mutex_exit();
+#else
   /* If the rollack segment is not empty then the
   new trx_t::no can't be less than any trx_t::no
   already in the rollback segment. User threads only
@@ -1424,6 +1427,7 @@ static bool trx_serialisation_number_get(
   } else {
     trx_sys_mutex_exit();
   }
+#endif
 
   return (added_trx_no);
 }
@@ -1474,6 +1478,34 @@ static bool trx_write_serialisation_history(
 
   bool serialised = false;
 
+#ifdef J3VM
+   if (trx->rsegs.m_redo.update_undo != nullptr) {
+    trx_undo_set_state_at_finish(trx->rsegs.m_redo.update_undo, mtr);
+  }
+
+  if (trx->rsegs.m_noredo.insert_undo != nullptr) {
+    trx_undo_set_state_at_finish(trx->rsegs.m_noredo.update_undo, &temp_mtr);
+  }
+
+  if (trx->rsegs.m_redo.update_undo != nullptr ||
+      trx->rsegs.m_noredo.update_undo != nullptr) {
+    /* Assign the transaction serialisation number and add these
+    rollback segments to purge trx-no sorted priority queue
+    if this is the first UNDO log being written to assigned
+    rollback segments. */
+
+    trx_undo_ptr_t *redo_rseg_undo_ptr =
+        trx->rsegs.m_redo.update_undo != nullptr ? &trx->rsegs.m_redo : nullptr;
+
+    trx_undo_ptr_t *temp_rseg_undo_ptr =
+        trx->rsegs.m_noredo.update_undo != nullptr ? &trx->rsegs.m_noredo
+                                                   : nullptr;
+
+    /* Will set trx->no and will add rseg to purge queue. */
+    serialised = trx_serialisation_number_get(trx, redo_rseg_undo_ptr,
+                                              temp_rseg_undo_ptr);
+  }
+#else
   /* If transaction involves update then add rollback segments
   to purge queue. */
   if (trx->rsegs.m_redo.update_undo != nullptr ||
@@ -1531,6 +1563,7 @@ static bool trx_write_serialisation_history(
                               n_added_logs, &temp_mtr);
     }
   }
+#endif
 
   if (own_redo_rseg_mutex) {
     trx->rsegs.m_redo.rseg->unlatch();
@@ -1888,6 +1921,12 @@ written */
   auto &gtid_persistor = clone_sys->get_gtid_persistor();
   gtid_persistor.set_persist_gtid(trx, false);
 
+#ifdef J3VM
+  if (trx->ebi_node) {
+     EbiDecreaseRefCount(trx->ebi_node); 
+     trx->ebi_node = nullptr;
+  }
+#endif
   if (mtr != nullptr) {
     if (trx->rsegs.m_redo.insert_undo != nullptr) {
       trx_undo_insert_cleanup(&trx->rsegs.m_redo, false);
@@ -1896,6 +1935,15 @@ written */
     if (trx->rsegs.m_noredo.insert_undo != nullptr) {
       trx_undo_insert_cleanup(&trx->rsegs.m_noredo, true);
     }
+#ifdef J3VM
+    if (trx->rsegs.m_redo.update_undo != nullptr) {
+      trx_undo_update_cleanup_force(trx, &trx->rsegs.m_redo, false);
+    }
+
+    if (trx->rsegs.m_noredo.update_undo != nullptr) {
+      trx_undo_update_cleanup_force(trx, &trx->rsegs.m_noredo, true);
+    }
+#endif
 
     /* NOTE that we could possibly make a group commit more
     efficient here: call os_thread_yield here to allow also other

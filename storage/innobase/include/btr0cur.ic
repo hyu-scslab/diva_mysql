@@ -172,3 +172,16 @@ void btr_rec_set_deleted_flag(rec_t *rec, page_zip_des_t *page_zip,
     rec_set_deleted_flag_old(rec, flag);
   }
 }
+
+#ifdef J3VM
+UNIV_INLINE
+void btr_rec_set_toggle_flag(rec_t *rec, page_zip_des_t *page_zip,
+                              ulint flag) {
+  if (page_rec_is_comp(rec)) {
+    rec_set_toggle_flag_new(rec, page_zip, flag);
+  } else {
+    ut_ad(!page_zip);
+    rec_set_toggle_flag_old(rec, flag);
+  }
+}
+#endif

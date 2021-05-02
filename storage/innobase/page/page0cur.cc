@@ -1288,7 +1288,15 @@ rec_t *page_cur_insert_rec_low(
   }
 
   /* 3. Create the record */
+#ifdef J3VM
+	if (rec_is_user_rec(rec, index)) {
+		insert_rec = rec_copy_special(insert_buf, rec, offsets);
+	} else {
+		insert_rec = rec_copy(insert_buf, rec, offsets);
+	}
+#else
   insert_rec = rec_copy(insert_buf, rec, offsets);
+#endif
   rec_offs_make_valid(insert_rec, index, offsets);
 
   /* 4. Insert the record in the linked list of records */
@@ -2118,8 +2126,15 @@ void page_copy_rec_list_end_to_created_page(
 
   do {
     offsets = rec_get_offsets(rec, index, offsets, ULINT_UNDEFINED, &heap);
+#ifdef J3VM
+		if (rec_is_user_rec(rec, index)) {
+    	insert_rec = rec_copy_special(heap_top, rec, offsets);
+		} else {
+			insert_rec = rec_copy(heap_top, rec, offsets);
+		}
+#else
     insert_rec = rec_copy(heap_top, rec, offsets);
-
+#endif
     if (page_is_comp(new_page)) {
       rec_set_next_offs_new(prev_rec, page_offset(insert_rec));
 

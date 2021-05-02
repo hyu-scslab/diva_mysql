@@ -123,6 +123,15 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "ut0crc32.h"
 #include "ut0new.h"
 
+#ifdef J3VM
+#include "include/pleaf_mgr.h"
+#include "include/pleaf.h"
+
+#include "include/ebi_tree_utils.h"
+#include "include/ebi_tree_process.h"
+
+#endif /* J3VM */
+
 /** fil_space_t::flags for hard-coded tablespaces */
 extern uint32_t predefined_flags;
 
@@ -199,6 +208,10 @@ mysql_pfs_key_t srv_purge_thread_key;
 mysql_pfs_key_t srv_worker_thread_key;
 mysql_pfs_key_t trx_recovery_rollback_thread_key;
 mysql_pfs_key_t srv_ts_alter_encrypt_thread_key;
+#ifdef J3VM
+mysql_pfs_key_t pleaf_generator_thread_key;
+mysql_pfs_key_t ebi_tree_thread_key;
+#endif /* J3VM */
 #endif /* UNIV_PFS_THREAD */
 
 #ifdef HAVE_PSI_STAGE_INTERFACE
@@ -2113,6 +2126,11 @@ dberr_t srv_start(bool create_new_db) {
     return (srv_init_abort(DB_ERROR));
   }
 
+#ifdef J3VM
+  PLeafInit();
+  EbiTreeInit();
+#endif /* J3VM */
+
   ib::info(ER_IB_MSG_1132);
 
 #ifdef UNIV_DEBUG
@@ -2968,6 +2986,20 @@ void srv_start_threads(bool bootstrap) {
 
   srv_threads.m_buf_resize.start();
 
+#ifdef J3VM
+  if (!bootstrap) {
+    srv_threads.m_pleaf_generator = os_thread_create(
+       pleaf_generator_thread_key, pleaf_generator_thread);
+  
+    srv_threads.m_pleaf_generator.start();
+  
+    srv_threads.m_ebi_tree = os_thread_create(
+      ebi_tree_thread_key, ebi_tree_thread);
+  
+    srv_threads.m_ebi_tree.start();
+  }
+#endif /* J3VM */
+
   if (srv_read_only_mode) {
     purge_sys->state = PURGE_STATE_DISABLED;
     return;
@@ -3302,6 +3334,14 @@ static void srv_shutdown_cleanup_and_master_stop() {
       {"buf_resize", srv_threads.m_buf_resize,
        std::bind(os_event_set, srv_buf_resize_event), SRV_SHUTDOWN_CLEANUP},
 
+#ifdef J3VM
+      {"pleaf_generator", srv_threads.m_pleaf_generator,
+        std::bind(os_event_set, srv_pleaf_generator_event), 
+        SRV_SHUTDOWN_CLEANUP},
+      {"ebi_tree", srv_threads.m_ebi_tree,
+        std::bind(os_event_set, srv_pleaf_generator_event),
+        SRV_SHUTDOWN_CLEANUP},
+#endif /* J3VM */
       {"master", srv_threads.m_master, srv_wake_master_thread,
        SRV_SHUTDOWN_MASTER_STOP}};
 
@@ -3647,6 +3687,10 @@ void srv_shutdown() {
   pars_lexer_close();
   buf_pool_free_all();
 
+#ifdef J3VM
+  PLeafFree();
+  EbiTreeFree();
+#endif /* J3VM */
   /* 6. Free the thread management resources. */
   clone_free();
   arch_free();

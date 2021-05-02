@@ -74,6 +74,10 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "my_dbug.h"
 
+#ifdef J3VM
+#include "include/pleaf.h"
+#include "include/ebi_tree_buf.h"
+#endif
 /** Maximum number of rows to prefetch; MySQL interface has another parameter */
 #define SEL_MAX_N_PREFETCH 16
 
@@ -3197,6 +3201,11 @@ dberr_t Row_sel_get_clust_rec_for_mysql::operator()(
   dberr_t err;
   trx_t *trx;
 
+#ifdef J3VM
+  ulint add_size;
+  const rec_t* recent_rec;
+  const rec_t* old_rec;
+#endif
   *out_rec = nullptr;
   trx = thr_get_trx(thr);
 
@@ -3349,7 +3358,170 @@ dberr_t Row_sel_get_clust_rec_for_mysql::operator()(
 
     /* If the isolation level allows reading of uncommitted data,
     then we never look for an earlier version */
+#ifdef J3VM
+    if (rec_is_user_rec(clust_rec, clust_index)) {
+      add_size = rec_offs_data_size(*offsets) + rec_offs_extra_size(*offsets);
 
+      if (rec_get_toggle_flag(clust_rec, 
+            dict_table_is_comp(clust_index->table))) {
+        recent_rec = clust_rec + add_size;
+        old_rec = clust_rec;
+      } else {
+        recent_rec = clust_rec;
+        old_rec = clust_rec + add_size;
+      }
+
+      if (trx->isolation_level > TRX_ISO_READ_UNCOMMITTED &&
+          !lock_clust_rec_cons_read_sees(recent_rec, clust_index, *offsets,
+            trx_get_read_view(trx))) {
+
+        err = DB_SUCCESS;
+        if (clust_rec != cached_clust_rec) {
+          if (!(*old_rec)) {
+            goto err_exit;
+          }
+          if (!lock_clust_rec_cons_read_sees(old_rec, clust_index, *offsets,
+                trx_get_read_view(trx))) {
+            const rec_t *meta;
+            uint64_t left_offset, right_offset;
+            trx_id_t trx_id_bound;
+            int return_id;
+            byte* buf;
+            rec_t* return_rec_start;
+            /** Physical user record format
+             ------------------------------------------------------------
+             | Record(or version) | Record(or version) | pleaf metadata |
+             ------------------------------------------------------------
+                ^                                      ^
+                |                                      |
+               rec (cursor record pointer)            meta
+             */
+            meta = clust_rec + rec_offs_data_size(*offsets) + add_size;
+
+            ut_memcpy(&left_offset, meta, sizeof(uint64_t));
+
+            ut_memcpy(&right_offset, meta + sizeof(uint64_t), 
+                                              sizeof(uint64_t));
+
+            ut_memcpy(&trx_id_bound, meta + 2 * sizeof(uint64_t), 
+                                                  sizeof(uint64_t));
+            
+            if (left_offset == 0 && right_offset == 0) {
+              /* Nothing to read */
+              return_id = -1;
+            } else if (PLeafIsLeftLookup(left_offset, right_offset, 
+                                          trx_id_bound, trx->read_view)) {
+              return_id = PLeafLookupTuple(left_offset, trx->read_view,
+                  add_size, &return_rec_start);
+            } else {
+              return_id = PLeafLookupTuple(right_offset, trx->read_view,
+                  add_size, &return_rec_start);
+            }
+
+            if (return_id == -1) {
+              old_vers = nullptr;
+            } else {
+              /** See row_sel_build_prev_vers_for_mysql(). */
+              if (prebuilt->old_vers_heap) {
+                mem_heap_empty(prebuilt->old_vers_heap);
+              } else {
+                prebuilt->old_vers_heap = mem_heap_create(200);
+              }
+
+              buf = static_cast<byte *>(
+                  mem_heap_alloc(prebuilt->old_vers_heap, add_size));
+              
+              old_vers = rec_copy(buf, 
+                  return_rec_start + rec_offs_extra_size(*offsets), *offsets);
+
+              *offsets = rec_get_offsets(
+                        old_vers, clust_index, 
+                        *offsets, ULINT_UNDEFINED, offset_heap); 
+
+              EbiTreeBufUnref(return_id);
+            }
+
+            cached_old_vers = old_vers;
+          } else {
+            cached_old_vers = const_cast<rec_t*>(old_rec);
+          }
+          cached_clust_rec = recent_rec;
+        } else {
+          old_vers = cached_old_vers;
+
+          if (old_vers != nullptr) {
+            DBUG_EXECUTE_IF("innodb_cached_old_vers_offsets", {
+                rec_offs_make_valid(old_vers, clust_index, *offsets);
+                if (!lob::rec_check_lobref_space_id(clust_index, old_vers,
+                      *offsets)) {
+                DBUG_SUICIDE();
+                }
+                });
+
+            /* The offsets need not be same for the latest version of
+               clust_rec and its old version old_vers.  Re-calculate the offsets
+               for old_vers. */
+            *offsets = rec_get_offsets(old_vers, clust_index, *offsets,
+                ULINT_UNDEFINED, offset_heap);
+            ut_ad(
+                lob::rec_check_lobref_space_id(clust_index, old_vers, *offsets));
+          }
+        }
+
+        if (old_vers == nullptr) {
+          goto err_exit;
+        }
+
+        clust_rec = old_vers;
+      }
+
+    } else {
+      if (trx->isolation_level > TRX_ISO_READ_UNCOMMITTED &&
+          !lock_clust_rec_cons_read_sees(clust_rec, clust_index, *offsets,
+            trx_get_read_view(trx))) {
+        if (clust_rec != cached_clust_rec) {
+          /* The following call returns 'offsets' associated with 'old_vers' */
+          err = row_sel_build_prev_vers_for_mysql(
+              trx->read_view, clust_index, prebuilt, clust_rec, offsets,
+              offset_heap, &old_vers, vrow, mtr, lob_undo);
+
+          if (err != DB_SUCCESS) {
+            goto err_exit;
+          }
+          cached_clust_rec = clust_rec;
+          cached_old_vers = old_vers;
+        } else {
+          err = DB_SUCCESS;
+          old_vers = cached_old_vers;
+
+          if (old_vers != nullptr) {
+            DBUG_EXECUTE_IF("innodb_cached_old_vers_offsets", {
+                rec_offs_make_valid(old_vers, clust_index, *offsets);
+                if (!lob::rec_check_lobref_space_id(clust_index, old_vers,
+                      *offsets)) {
+                DBUG_SUICIDE();
+                }
+                });
+
+            /* The offsets need not be same for the latest version of
+               clust_rec and its old version old_vers.  Re-calculate the offsets
+               for old_vers. */
+            *offsets = rec_get_offsets(old_vers, clust_index, *offsets,
+                ULINT_UNDEFINED, offset_heap);
+            ut_ad(
+                lob::rec_check_lobref_space_id(clust_index, old_vers, *offsets));
+          }
+        }
+
+        if (old_vers == nullptr) {
+          goto err_exit;
+        }
+
+        clust_rec = old_vers;
+      }
+
+    }
+#else
     if (trx->isolation_level > TRX_ISO_READ_UNCOMMITTED &&
         !lock_clust_rec_cons_read_sees(clust_rec, clust_index, *offsets,
                                        trx_get_read_view(trx))) {
@@ -3393,6 +3565,7 @@ dberr_t Row_sel_get_clust_rec_for_mysql::operator()(
 
       clust_rec = old_vers;
     }
+#endif
 
     /* If we had to go to an earlier version of row or the
     secondary index record is delete marked, then it may be that
@@ -4500,6 +4673,12 @@ dberr_t row_search_mvcc(byte *buf, page_cur_mode_t mode,
   bool spatial_search = false;
   ulint end_loop = 0;
 
+#ifdef J3VM
+  ulint toggle_flag;
+  ulint add_size;
+  const rec_t* recent_rec;
+  const rec_t* old_rec;
+#endif
   rec_offs_init(offsets_);
 
   ut_ad(index && pcur && search_tuple);
@@ -5347,6 +5526,14 @@ rec_loop:
       err = DB_RECORD_NOT_FOUND;
       goto normal_return;
     }
+#ifdef J3VM
+    /* rec should point to the recent one after this point if lock_type is not
+     LOCK_NONE. In SIRO-versioning, we cannot guarantee that rec is the recent
+     version, so check it using by toggle flag. */
+    if (rec_is_user_rec(rec, index) && rec_get_toggle_flag(rec, comp)) {
+      rec = rec + rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+    } 
+#endif
   } else {
     /* This is a non-locking consistent read: if necessary, fetch
     a previous version of the record */
@@ -5361,6 +5548,143 @@ rec_loop:
       high force recovery level set, we try to avoid crashes
       by skipping this lookup */
 
+#ifdef J3VM
+      /* We assume this record is user record at this point. */
+      if (rec_is_user_rec(rec, index)) {
+        toggle_flag = rec_get_toggle_flag(rec, comp);
+        add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
+  
+        if (toggle_flag) {
+          recent_rec = rec + add_size;
+          old_rec = rec;
+        } else {
+          recent_rec = rec;
+          old_rec = rec + add_size;
+        }
+
+        /* VALIDATION CHECK JAESEON */
+        if (srv_force_recovery < 5 &&
+            !lock_clust_rec_cons_read_sees(recent_rec, index, offsets,
+                                           trx_get_read_view(trx))) {
+  
+          if (!(*old_rec)) {
+            /* JAESEON: In newly inserted record, this could be happenend.
+             But, the condition of *old_rec is not precise I think. */
+            goto next_rec;
+          }
+
+          if (!lock_clust_rec_cons_read_sees(old_rec, index, offsets,
+                                            trx_get_read_view(trx))) {
+            rec_t *old_vers;
+            const rec_t *meta;
+            uint64_t left_offset, right_offset;
+            trx_id_t trx_id_bound;
+            int return_id;
+            byte* buf;
+            rec_t* return_rec_start;
+            /** Physical user record format
+             ------------------------------------------------------------
+             | Record(or version) | Record(or version) | pleaf metadata |
+             ------------------------------------------------------------
+                ^                                      ^
+                |                                      |
+               rec (cursor record pointer)            meta
+             */
+            meta = rec + rec_offs_data_size(offsets) + add_size;
+
+            ut_memcpy(&left_offset, meta, sizeof(uint64_t));
+
+            ut_memcpy(&right_offset, meta + sizeof(uint64_t), 
+                                              sizeof(uint64_t));
+
+            ut_memcpy(&trx_id_bound, meta + 2 * sizeof(uint64_t), 
+                                                  sizeof(uint64_t));
+            
+            err = DB_SUCCESS;
+
+            if (left_offset == 0 && right_offset == 0) {
+              /* Nothing to read */
+              return_id = -1;
+            } else if (PLeafIsLeftLookup(left_offset, right_offset, 
+                                          trx_id_bound, trx->read_view)) {
+              return_id = PLeafLookupTuple(left_offset, trx->read_view,
+                  add_size, &return_rec_start);
+            } else {
+              return_id = PLeafLookupTuple(right_offset, trx->read_view,
+                  add_size, &return_rec_start);
+            }
+
+            if (return_id == -1) {
+              old_vers = nullptr;
+            } else {
+              /** See row_sel_build_prev_vers_for_mysql(). */
+              if (prebuilt->old_vers_heap) {
+                mem_heap_empty(prebuilt->old_vers_heap);
+              } else {
+                prebuilt->old_vers_heap = mem_heap_create(200);
+              }
+
+              buf = static_cast<byte *>(
+                  mem_heap_alloc(prebuilt->old_vers_heap, add_size));
+              
+              old_vers = rec_copy(buf, 
+                  return_rec_start + rec_offs_extra_size(offsets), offsets);
+
+              offsets = rec_get_offsets(
+                  old_vers, index, offsets, ULINT_UNDEFINED, &heap); 
+
+              EbiTreeBufUnref(return_id);
+            }
+
+            if (old_vers == nullptr) {
+              /* The row did not exist yet in
+               the read view */
+              
+              goto next_rec;
+            }
+            rec = old_vers;
+            prev_rec = rec;
+  
+          } else {
+            /* If transaction can see old rec, modify rec to old rec. */
+            rec = old_rec;
+            prev_rec = rec;
+          }
+        } else {
+          /* If transaction can see recent rec, modify rec to recent rec. */
+          rec = recent_rec;
+          prev_rec = rec;
+        }
+      } else {
+        if (srv_force_recovery < 5 &&
+            !lock_clust_rec_cons_read_sees(rec, index, offsets,
+                                           trx_get_read_view(trx))) {
+          rec_t *old_vers;
+          /* The following call returns 'offsets' associated with 'old_vers' */
+          err = row_sel_build_prev_vers_for_mysql(
+              trx->read_view, clust_index, prebuilt, rec, &offsets, &heap,
+              &old_vers, need_vrow ? &vrow : nullptr, &mtr,
+              prebuilt->get_lob_undo());
+  
+          if (err != DB_SUCCESS) {
+            goto lock_wait_or_error;
+          }
+  
+          if (old_vers == nullptr) {
+            /* The row did not exist yet in
+            the read view */
+  
+            goto next_rec;
+          }
+  
+          rec = old_vers;
+          prev_rec = rec;
+          ut_d(prev_rec_debug = row_search_debug_copy_rec_order_prefix(
+                   pcur, index, prev_rec, &prev_rec_debug_n_fields,
+                   &prev_rec_debug_buf, &prev_rec_debug_buf_size));
+        }
+      }
+#else
       if (srv_force_recovery < 5 &&
           !lock_clust_rec_cons_read_sees(rec, index, offsets,
                                          trx_get_read_view(trx))) {
@@ -5388,6 +5712,7 @@ rec_loop:
                  pcur, index, prev_rec, &prev_rec_debug_n_fields,
                  &prev_rec_debug_buf, &prev_rec_debug_buf_size));
       }
+#endif
     } else {
       /* We are looking into a non-clustered index,
       and to get the right version of the record we
@@ -5738,8 +6063,17 @@ rec_loop:
         result_rec = rec;
       }
 
+#ifdef J3VM
+      if (rec_is_user_rec(result_rec, index)) {
+        memcpy(buf + 4, result_rec - rec_offs_extra_size(offsets), add_size);
+      } else {
+        memcpy(buf + 4, result_rec - rec_offs_extra_size(offsets),
+               rec_offs_size(offsets));
+      }
+#else
       memcpy(buf + 4, result_rec - rec_offs_extra_size(offsets),
              rec_offs_size(offsets));
+#endif
       mach_write_to_4(buf, rec_offs_extra_size(offsets) + 4);
     } else if (!prebuilt->idx_cond && !prebuilt->innodb_api) {
       /* The record was not yet converted to MySQL format. */
