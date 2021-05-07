@@ -5627,6 +5627,7 @@ rec_loop:
               buf = static_cast<byte *>(
                   mem_heap_alloc(prebuilt->old_vers_heap, add_size));
               
+
               old_vers = rec_copy(buf, 
                   return_rec_start + rec_offs_extra_size(offsets), offsets);
 

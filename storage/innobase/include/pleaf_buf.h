@@ -40,7 +40,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #ifdef PLEAF_NUM_PAGE
 constexpr int NPLeafBuffers = PLEAF_NUM_PAGE;
 #else
-constexpr int NPLeafBuffers = 1000;
+constexpr int NPLeafBuffers = 1000 * 1000;
 #endif /* PLEAF_NUM_PAGE */
 
 /* PLeaf Number of Instances (<= 15) */
@@ -61,7 +61,7 @@ constexpr int NPLeafInitPages = 0;
 #ifdef PLEAF_NUM_PARTITION
 constexpr int NPLeafPartitions = PLEAF_NUM_PARTITION;
 #else
-constexpr int NPLeafPartitions = 16;
+constexpr int NPLeafPartitions = 256;
 #endif /* PLEAF_NUM_PARTITION */
 
 /* Base 16MB */
@@ -268,4 +268,7 @@ extern void PLeafCleanOldGeneration(void);
 
 extern bool PLeafNeedsNewGeneration(void);
 
+extern void MonitorOurs(ulint tup_len);
+
 #endif /* PLEAF_BUF_H */
+

@@ -37,5 +37,6 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "univ.i"
 
 extern void pleaf_generator_thread();
+extern void pleaf_monitor_on(ulint tuple_size);
 
 #endif /* PLEAF_MGR_H */

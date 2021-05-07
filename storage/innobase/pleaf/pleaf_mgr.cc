@@ -48,6 +48,9 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #define PLEAF_DELAY_IN_MS (1000)
 
+static bool started {false};
+static ulint tup_len {0};
+
 void pleaf_generator_thread() {
   while (srv_shutdown_state.load() < SRV_SHUTDOWN_CLEANUP) {
 
@@ -65,7 +68,18 @@ void pleaf_generator_thread() {
       /* Create new generation */
 			PLeafMakeNewGeneration();
 		}
+
+    if (started)
+      MonitorOurs(tup_len);
   }
 }
 
+/* for temp */
+void pleaf_monitor_on(ulint tuple_size) {
+  if (!started) {
+    tup_len = tuple_size;
+    started = true;
+  } else
+    return;
+}
 #endif

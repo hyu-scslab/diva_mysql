@@ -96,6 +96,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #ifdef J3VM
 #include "pleaf.h"
+#include "pleaf_mgr.h"
 #endif
 
 /** Buffered B-tree operation types, introduced as part of delete buffering. */
@@ -3172,6 +3173,8 @@ pleaf_append_if_needed(
         ut_a(false);
     }
 
+    // JAESEON:
+    ut_a(rec_get_status(second_old_rec) == REC_STATUS_ORDINARY);
     if (is_left) {
       (void) PLeafAppendTuple(left_offset, 
           reinterpret_cast<uint64_t*>(meta),
@@ -3709,8 +3712,11 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 #ifdef J3VM
   /* Cursor(rec) should point to left-version in SIRO-versioning. */
   toggle_type = DEFAULT_TOGGLE_TYPE;
-
+  add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
   if (rec_is_user_rec(rec, index)) {
+
+    /* For stats */
+    pleaf_monitor_on(add_size);
     /* Get toggle type and toggle flag. See btr_cur_get_toggle_type(). */
     toggle_type = btr_cur_get_toggle_type(
         flags, rec, thr_get_trx(thr), offsets, index, trx_id);
@@ -3744,7 +3750,6 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 
 
 #ifdef J3VM
-  add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
 
   if (rec_is_user_rec(rec, index) && toggle_type == UPDATE_TOGGLE_NORMAL) {
     pleaf_append_if_needed(rec, offsets, index, toggle_flag); 

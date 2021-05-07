@@ -20,7 +20,7 @@
  * Actual EBI tree structure.
  * */
 typedef uint32_t EbiTreeSegmentId;
-typedef uint32_t EbiTreeSegmentOffset;
+typedef uint64_t EbiTreeSegmentOffset;
 typedef uint32_t EbiTreeSegmentPageId;
 typedef uint64_t EbiTreeVersionOffset;
 
@@ -28,14 +28,16 @@ typedef uint64_t EbiTreeVersionOffset;
 #define EBI_TREE_INVALID_SEG_ID ((EbiTreeSegmentId)(0))
 #define EBI_TREE_INVALID_VERSION_OFFSET ((uint64)(-1))
 
-#define EBI_TREE_SEG_ID_MASK (0xFFFFFFFF00000000ULL)
-#define EBI_TREE_SEG_OFFSET_MASK (0x00000000FFFFFFFFULL)
+#define EBI_TREE_SEG_ID_MASK (0xFFFFFF0000000000ULL)
+#define EBI_TREE_SEG_OFFSET_MASK (0x000000FFFFFFFFFFULL)
 #define EBI_TREE_VERSION_OFFSET_TO_SEG_ID(version_offset) \
-  ((version_offset & EBI_TREE_SEG_ID_MASK) >> 32)
+  ((version_offset & EBI_TREE_SEG_ID_MASK) >> 40)
+
 #define EBI_TREE_VERSION_OFFSET_TO_SEG_OFFSET(version_offset) \
   (version_offset & EBI_TREE_SEG_OFFSET_MASK)
+
 #define EBI_TREE_SEG_TO_VERSION_OFFSET(seg_id, seg_offset) \
-  ((((uint64)(seg_id)) << 32) | seg_offset)
+  ((((uint64)(seg_id)) << 40) | seg_offset)
 
 typedef struct EbiNodeData* EbiNode;
 
@@ -52,7 +54,7 @@ typedef struct EbiNodeData {
   ReadView* right_boundary;
 
   EbiTreeSegmentId seg_id;       /* file segment */
-  uint32_t seg_offset;   /* aligned version offset */
+  uint64_t seg_offset;   /* aligned version offset */
   uint64_t num_versions; /* number of versions */
 
   trx_id_t current_max_xid;

@@ -222,24 +222,23 @@ static PLeafGenNumber PLeafInitInfoFile(void)
   versioninfo_fd = open(filename, O_RDWR | O_CREAT, (mode_t)0600);
   ut_a(versioninfo_fd >= 0);
 
-  if (my_pread(versioninfo_fd, reinterpret_cast<uchar*>(&ret_gen_no), 
-                                gen_size, 0, 0) != gen_size)
+  if (pread(versioninfo_fd, &ret_gen_no, 
+                                gen_size, 0) != int(gen_size))
   {
     /* File is created now */
     ret_gen_no = 1;
 
-    ut_a(my_pwrite(
-          versioninfo_fd, reinterpret_cast<uchar*>(&ret_gen_no), 
-                          gen_size, 0, 0) == gen_size);
+    ut_a(pwrite(
+          versioninfo_fd, &ret_gen_no, gen_size, 0) == int(gen_size));
   }
   else
   {
     /* We use 2-bytes for generation number */
     ret_gen_no += 1;
     ut_a(ret_gen_no != InvalidGid);
-    ut_a(my_pwrite(
-          versioninfo_fd, reinterpret_cast<uchar*>(&ret_gen_no), 
-                          gen_size, 0, 0) == gen_size);
+    ut_a(pwrite(
+          versioninfo_fd, &ret_gen_no, 
+                          gen_size, 0) == int(gen_size));
   }
   return ret_gen_no;
 }
@@ -253,8 +252,8 @@ PLeafUpdateVersionInfo(void)
 
   ut_a(versioninfo_fd >= 0);
 
-  if (my_pread(versioninfo_fd, reinterpret_cast<uchar*>(&ret_gen_no), 
-                                    gen_size, 0, 0) != gen_size)
+  if (pread(versioninfo_fd, &ret_gen_no, 
+                                    gen_size, 0) != int(gen_size))
   {
     ut_a(false);
   }
@@ -264,9 +263,8 @@ PLeafUpdateVersionInfo(void)
     ret_gen_no += 1;
     ut_a(ret_gen_no != InvalidGid);
 
-    ut_a(my_pwrite(
-          versioninfo_fd, reinterpret_cast<uchar*>(&ret_gen_no), 
-                              gen_size, 0, 0) == gen_size);
+    ut_a(pwrite(versioninfo_fd, &ret_gen_no, 
+                              gen_size, 0) == int(gen_size));
   }
   return ret_gen_no;
 }
@@ -284,6 +282,7 @@ PLeafInitDataFile(int pool_index)
     ut_a(versiondata_fd[pool_index] >= 0);
     ut_a(fallocate(
           versiondata_fd[pool_index], 0, 0, PLEAF_INIT_FILE_SIZE) == 0);
+    ut_a(ftruncate(versiondata_fd[pool_index], PLEAF_INIT_FILE_SIZE) == 0);  
   }
   else
   {
@@ -445,6 +444,7 @@ find_cand:
        * Write dirty page to disk will be not executed depends on
        * generation number (active or inactive).
        */
+
       PLeafWritePage(&frame->tag, candidate_id);
       frame->is_dirty = false;
     }
@@ -509,9 +509,9 @@ PLeafReadPage(const PLeafTag *tag,
   ut_a(versiondata_fd[pool_index] >= 0);
 
   ut_a(PLEAF_PAGE_SIZE == 
-      my_pread(versiondata_fd[pool_index],
-        reinterpret_cast<uchar*>(&PLeafBlocks[frame_id * PLEAF_PAGE_SIZE]),
-                  PLEAF_PAGE_SIZE, tag->page_id * PLEAF_PAGE_SIZE, 0));
+      pread(versiondata_fd[pool_index],
+        &PLeafBlocks[frame_id * PLEAF_PAGE_SIZE],
+                  PLEAF_PAGE_SIZE, (off_t)tag->page_id * PLEAF_PAGE_SIZE));
 }
 
 /* PLeafWritePage */
@@ -542,9 +542,9 @@ PLeafWritePage(const PLeafTag *tag,
   ut_a(versiondata_fd[pool_index] >= 0);
 
   ut_a(PLEAF_PAGE_SIZE == 
-      my_pwrite(versiondata_fd[pool_index], 
-        reinterpret_cast<uchar*>(&PLeafBlocks[frame_id * PLEAF_PAGE_SIZE]),
-                  PLEAF_PAGE_SIZE, tag->page_id * PLEAF_PAGE_SIZE, 0));
+      pwrite(versiondata_fd[pool_index], 
+        &PLeafBlocks[frame_id * PLEAF_PAGE_SIZE],
+                  PLEAF_PAGE_SIZE, (off_t)tag->page_id * PLEAF_PAGE_SIZE));
 
   rw_lock_s_unlock(&pleaf_rwlocks[pool_index]);
 }
@@ -1089,8 +1089,6 @@ PLeafMakeNewGeneration()
   new_gen_no = PLeafUpdateVersionInfo();
   ut_a(new_gen_no == meta->generation_numbers[meta->recent_index] + 1);
 
-
-
   meta->max_page_ids[new_recent_index] = 0;
   meta->generation_numbers[new_recent_index] = new_gen_no;
   PLeafManager->pools[new_recent_index].gen_no = new_gen_no;  
@@ -1191,6 +1189,18 @@ PLeafNeedsNewGeneration(void)
     ret = true;
 
   return ret;
+}
+
+void
+MonitorOurs(ulint tup_len)
+{
+  if (tup_len == 0)
+    return;
+  PLeafPageId max_page_id;
+  max_page_id = PLeafMetadata->pleafmeta.max_page_ids[LEFT_POOL] +
+    PLeafMetadata->pleafmeta.max_page_ids[RIGHT_POOL];
+  ib::warn() << "[OURS] " << max_page_id  * PLEAF_PAGE_SIZE << " " <<  
+    EbiTreePtr->num_versions * tup_len;
 }
 
 #endif

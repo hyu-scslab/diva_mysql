@@ -31,7 +31,7 @@
 #define NUM_VERSIONS_PER_CHUNK 1000
 
 constexpr double W_AVG {0.999};
-constexpr int W_CONST {3};
+constexpr double W_CONST {0.4};
 
 static double avg_version_lifetime {0.0};
 static std::atomic_flag flag_version_lifetime {ATOMIC_FLAG_INIT};
@@ -471,6 +471,7 @@ LinkProxy(EbiNode proxy, EbiNode new_proxy_target) {
   }
 
   proxy->proxy_target = new_proxy_target;
+  os_wmb;
 }
 
 
@@ -591,8 +592,8 @@ EbiTreeSiftAndBind(
     seg_offset = __sync_fetch_and_add(&node->seg_offset, tuple_size);
 
     /* Checking if the tuple could be written within a single page */
-    found = seg_offset / EBI_TREE_SEG_PAGESZ ==
-            (seg_offset + tuple_size - 1) / EBI_TREE_SEG_PAGESZ;
+    found = (seg_offset / EBI_TREE_SEG_PAGESZ) ==
+            ((seg_offset + tuple_size - 1) / EBI_TREE_SEG_PAGESZ);
   } while (!found);
 
   // Write version to segment
@@ -667,6 +668,7 @@ EbiTreeSegIsAlive(EbiTree ebitree, EbiTreeSegmentId seg_id) {
     if (curr->seg_id == seg_id) {
       return true;
     }
+    os_rmb;
     curr = curr->proxy_target;
   }
   return false;

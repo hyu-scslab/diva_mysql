@@ -64,6 +64,8 @@ PLeafIsVisible(ReadView* snapshot,
 	}
 	else
 	{
+    // TODO
+    return PLEAF_LOOKUP_FORWARD;
 		if (!xmin_visible)
 			return PLEAF_LOOKUP_BACKWARD;
 		else

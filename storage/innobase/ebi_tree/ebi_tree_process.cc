@@ -27,9 +27,9 @@
 
 #include <chrono>
 
-#define EBI_DELAY_IN_MS (300)
+#define EBI_DELAY_IN_MS (100)
 
-constexpr double ebi_force_insert_delay = 2000; /* in milliseconds */
+constexpr double ebi_force_insert_delay = 100; /* in milliseconds */
 EbiTreeStruct *EbiTreePtr = nullptr;
 
 

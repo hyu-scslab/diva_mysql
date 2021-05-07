@@ -16,18 +16,18 @@
 #include "include/ebi_tree.h"
 
 #define SIZEOF_VOID_P (sizeof(void*))
-#define EBI_TREE_SEG_PAGESZ (8192)
+#define EBI_TREE_SEG_PAGESZ ((size_t)(1UL << 13))
 
 #ifdef EBI_NUM_PAGE
 constexpr int NEbiBuffers = EBI_NUM_PAGE;
 #else
-constexpr int NEbiBuffers = 1000;
+constexpr int NEbiBuffers = 1000 * 1000;
 #endif /* EBI_NUM_PAGE */
 
 #ifdef EBI_NUM_PARTITION
 constexpr int NEbiPartitions = EBI_NUM_PARTITION;
 #else
-constexpr int NEbiPartitions = 16;
+constexpr int NEbiPartitions = 256;
 #endif /* EBI_NUM_PARTITION */
 
 typedef struct EbiTreeBufTag {
@@ -95,5 +95,8 @@ extern void EbiTreeRemoveSegmentFile(EbiTreeSegmentId seg_id);
 extern bool EbiTreeBufIsValid(int buf_id);
 
 extern void EbiTreeBufUnref(int buf_id);
+extern int OpenSegmentFile(EbiTreeSegmentId seg_id);
+extern void CloseSegmentFile(int fd);
+
 
 #endif /* EBI_TREE_BUF_H */
