@@ -62,14 +62,14 @@ void ebi_tree_thread() {
     if (NeedsNewNode(EbiTreePtr->ebitree)) {
       start_time = high_resolution_clock::now();
       InsertNode(EbiTreePtr->ebitree);
-      back_view->background_work();
+      //back_view->background_work();
     } else if (EbiTreePtr->ebitree->recent_node->left_boundary != nullptr) {
       end_time = high_resolution_clock::now();
       current_dur = duration_cast<milliseconds>(end_time - start_time);
       if (current_dur.count() >= ebi_force_insert_delay) {
         start_time = high_resolution_clock::now();
         InsertNode(EbiTreePtr->ebitree);
-        back_view->background_work();
+        //back_view->background_work();
       }
     }
   }

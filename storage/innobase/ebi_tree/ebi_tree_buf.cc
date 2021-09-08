@@ -38,6 +38,8 @@ EbiTreeBufDescPadded *EbiTreeBufDescriptors;
 char *EbiTreeBufBlocks;
 EbiTreeBufMeta *EbiTreeBuf;
 
+extern GarbageQueue* gc_queue;
+
 #define EBI_TREE_SEG_OFFSET_TO_PAGE_ID(off) ((off) / (EBI_TREE_SEG_PAGESZ))
 
 /* Private functions */
@@ -188,10 +190,6 @@ EbiTreeBufGetBufRef(EbiTreeSegmentId seg_id, EbiTreeSegmentOffset seg_offset) {
   rw_lock_s_unlock(new_partition_lock);
   rw_lock_x_lock(new_partition_lock);
 
-  /*
-   * If another transaction already inserted the vcache hash entry,
-   * just use it
-   */
   buf_id = EbiTreeHashLookup(&tag, hashcode);
   if (buf_id >= 0) {
     buf = GetEbiTreeBufDescriptor(buf_id);
@@ -258,6 +256,7 @@ find_cand:
        *    changed
        * In this case, just find another victim for simplicity now.
        */
+			__sync_fetch_and_sub(&buf->refcnt, 1);
       rw_lock_x_unlock(old_partition_lock);
       goto find_cand;
     }
@@ -271,13 +270,15 @@ find_cand:
       /* There is consensus protocol between evict page and cut segment. */
       /* The point is that never evict(flush) page which is
        * included in the file of cutted-segment */
-      seg_id = buf->tag.seg_id;
+			ut_a(buf->tag.seg_id != 0);
 
       /* Check if the page related segment file has been removed */
-      if (EbiTreeSegIsAlive(EbiTreePtr->ebitree, seg_id)) {
+			// [JS_URGENT]
+			uint64_t my_slot = gc_queue->increase_ref_count();
+      if (EbiTreeSegIsAlive(EbiTreePtr->ebitree, buf->tag.seg_id)) {
         EbiTreeWriteSegmentPage(&buf->tag, candidate_id);
-      } else {
-      }
+      } 
+			gc_queue->decrease_ref_count(my_slot);
 
       /*
        * We do not zero the page so that the page could be overwritten
@@ -298,14 +299,14 @@ find_cand:
      * This cache entry is unused. Just increase the refcount and use it.
      */
     ret = __sync_fetch_and_add(&buf->refcnt, 1);
-    if (ret > 0) {
+    if (ret > 0 || buf->tag.seg_id != 0) {
       /*
        * Race occured. Possibly another evicting tranasaction might get
        * this page if round robin cycle is too short.
        */
       __sync_fetch_and_sub(&buf->refcnt, 1);
       goto find_cand;
-    }
+     }  
   }
 
   /* Initialize the descriptor for a new cache */

@@ -47,6 +47,10 @@ typedef struct EbiNodeData {
   EbiNode right;
   EbiNode proxy_target;
 
+#ifdef JS_WIDTH
+	uint32_t left_most;
+#endif
+
   uint32_t height;
   uint32_t refcnt;
 
@@ -96,7 +100,8 @@ extern int EbiTreeLookupVersion(
     ulint tuple_size,
     rec_t** ret_value);
 
-extern bool EbiTreeSegIsAlive(EbiTree ebitree, EbiTreeSegmentId seg_id);
+extern bool EbiTreeSegIsAlive(EbiTree ebitree,
+		EbiTreeSegmentId seg_id);
 
 extern void EbiTreeGCQueueInit();
 extern void EbiTreeGCQueueFree();

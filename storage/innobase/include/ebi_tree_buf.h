@@ -98,5 +98,4 @@ extern void EbiTreeBufUnref(int buf_id);
 extern int OpenSegmentFile(EbiTreeSegmentId seg_id);
 extern void CloseSegmentFile(int fd);
 
-
 #endif /* EBI_TREE_BUF_H */

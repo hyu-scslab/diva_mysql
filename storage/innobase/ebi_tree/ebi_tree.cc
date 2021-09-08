@@ -36,7 +36,7 @@ constexpr double W_CONST {0.4};
 static double avg_version_lifetime {0.0};
 static std::atomic_flag flag_version_lifetime {ATOMIC_FLAG_INIT};
 
-static GarbageQueue* gc_queue {nullptr};
+GarbageQueue* gc_queue {nullptr};
 
 /* Prototypes for private functions */
 
@@ -115,6 +115,10 @@ CreateNodeWithHeight(uint32_t height) {
   node->seg_id =
       EbiTreePtr->seg_id++;  // the dedicated thread, alone, creates nodes
 
+#ifdef JS_WIDTH
+	node->left_most = node->seg_id; // seg_id is also used for its sequence no.
+#endif
+
   EbiTreeCreateSegmentFile(node->seg_id);
   node->seg_offset = 0;
 
@@ -192,6 +196,9 @@ InsertNode(EbiTree ebitree) {
   }
   // f->e, f->g
   new_parent->left = target;
+#ifdef JS_WIDTH
+	new_parent->left_most = target->left_most;
+#endif
   new_parent->right = new_leaf;
 
   /*
@@ -227,14 +234,24 @@ FindInsertionTargetNode(EbiTree ebitree) {
   EbiNode left;
   EbiNode right;
 
+#ifdef JS_WIDTH
+	uint32_t right_most;
+#endif
   tmp = ebitree->recent_node;
   parent = tmp->parent;
 
+#ifdef JS_WIDTH
+	right_most = tmp->seg_id;
+#endif
   while (parent != nullptr) {
     left = parent->left;
     right = parent->right;
-
+#ifdef JS_WIDTH
+		if (parent->seg_id - parent->left_most > 
+				right_most - parent->seg_id) {
+#else
     if (left->height > right->height) {
+#endif
       // Unbalanced, found target node.
       break;
     } else {
@@ -401,6 +418,9 @@ CompactNode(EbiTree ebitree, EbiNode node) {
   EbiNode proxy_target;
   uint32_t original_height;
 
+#ifdef JS_WIDTH
+	uint32_t current_left_most;
+#endif
   proxy_target = node;
 
   if (HasParent(node) == false) {
@@ -419,6 +439,11 @@ CompactNode(EbiTree ebitree, EbiNode node) {
 
     parent = node->parent;
 
+#ifdef JS_WIDTH
+		/**
+		 *	We only update parent's left-most value when it is a left child.
+		 */
+#endif
     // Compact the one-and-only child and its parent
     if (IsLeftChild(node)) {
       if (HasLeftChild(node)) {
@@ -427,6 +452,9 @@ CompactNode(EbiTree ebitree, EbiNode node) {
       } else {
         LinkProxy(node->right, proxy_target);
         parent->left = node->right;
+#ifdef JS_WIDTH
+				parent->left_most = node->right->left_most;
+#endif
       }
       tmp = parent->left;
     } else {
@@ -441,6 +469,25 @@ CompactNode(EbiTree ebitree, EbiNode node) {
     }
     tmp->parent = node->parent;
 
+#ifdef JS_WIDTH
+		current_left_most = parent->left_most;
+
+		tmp_ptr = node->parent;
+
+		while (tmp_ptr != nullptr) {
+			EbiNode curr;
+			curr = tmp_ptr;
+
+			if (curr->parent == nullptr ||
+					curr->parent->left_most == current_left_most ||
+					!IsLeftChild(curr))
+				break;
+
+			curr->parent->left_most = current_left_most;
+
+			tmp_ptr = tmp_ptr->parent;
+		}	
+#else
     // Parent height propagation
     tmp_ptr = node->parent;
     while (tmp_ptr != nullptr) {
@@ -457,9 +504,9 @@ CompactNode(EbiTree ebitree, EbiNode node) {
       if (curr->height == original_height) {
         break;
       }
-
       tmp_ptr = curr->parent;
     }
+#endif
   }
 }
 
@@ -577,10 +624,13 @@ EbiTreeSiftAndBind(
   EbiTreeVersionOffset ret;
   uint64_t num_versions;
 
+	// [JS_URGENT]
+	uint64_t my_slot = gc_queue->increase_ref_count();
   node = Sift(vmin, vmax);
 
   if (!node) {
     /* Reclaimable */
+		gc_queue->decrease_ref_count(my_slot);
     return EBI_TREE_INVALID_VERSION_OFFSET;
   }
 
@@ -613,6 +663,8 @@ EbiTreeSiftAndBind(
     __sync_fetch_and_add(&EbiTreePtr->num_versions, NUM_VERSIONS_PER_CHUNK);
   }
 
+
+	gc_queue->decrease_ref_count(my_slot);
   ret = EBI_TREE_SEG_TO_VERSION_OFFSET(seg_id, seg_offset);
 
   return ret;
@@ -641,12 +693,19 @@ EbiTreeLookupVersion(
 bool
 EbiTreeSegIsAlive(EbiTree ebitree, EbiTreeSegmentId seg_id) {
   EbiNode curr;
+	uint64_t my_slot;
+	bool ret;
 
+	//my_slot = gc_queue->increase_ref_count();
   curr = ebitree->root;
+	ret = false;
+
+	os_rmb;
 
   while (!IsLeaf(curr)) {
     if (curr->seg_id == seg_id) {
-      return true;
+			ret = true;
+			goto func_exit;
     }
 
     if (seg_id < curr->seg_id) {
@@ -657,7 +716,7 @@ EbiTreeSegIsAlive(EbiTree ebitree, EbiTreeSegmentId seg_id) {
 
     /* It has been concurrently removed by the EBI-tree process */
     if (!curr) {
-      return false;
+			goto func_exit;
     }
   }
 
@@ -666,12 +725,17 @@ EbiTreeSegIsAlive(EbiTree ebitree, EbiTreeSegmentId seg_id) {
   while (curr != nullptr) {
 
     if (curr->seg_id == seg_id) {
-      return true;
+			ret = true;
+			goto func_exit;
     }
     os_rmb;
     curr = curr->proxy_target;
   }
-  return false;
+
+func_exit:
+
+	//gc_queue->decrease_ref_count(my_slot);
+	return ret;
 }
 
 /**
