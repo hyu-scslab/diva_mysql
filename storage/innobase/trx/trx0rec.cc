@@ -55,6 +55,18 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "ut0mem.h"
 
 #include "my_dbug.h"
+#ifdef JS_TEST
+#include <chrono>
+extern thread_local bool buf_flag;
+extern thread_local bool undo_flag;
+thread_local uint64_t undo_page_io2;
+thread_local uint64_t undo_page_io3;
+thread_local uint64_t undo_page_io4;
+thread_local uint64_t undo_page_io0_1;
+thread_local uint64_t undo_page_io0_2;
+thread_local uint64_t undo_page_io0_3;
+thread_local uint64_t undo_page_io0_4;
+#endif
 
 namespace dd {
 class Spatial_reference_system;
@@ -2417,8 +2429,22 @@ static MY_ATTRIBUTE((warn_unused_result))
 
   mtr_start(&mtr);
 
+#ifdef JS_TEST
+		std::chrono::steady_clock::time_point start;
+		if (buf_flag && undo_flag)
+			start = std::chrono::steady_clock::now();
+#endif
   undo_page = trx_undo_page_get_s_latched(page_id_t(space_id, page_no),
                                           page_size, &mtr);
+#ifdef JS_TEST
+		if (buf_flag && undo_flag) {
+			auto cur_elapsed = 
+				std::chrono::duration_cast<std::chrono::nanoseconds>(
+						std::chrono::steady_clock::now() - start);
+			undo_page_io2 += 
+				static_cast<uint64_t>(cur_elapsed.count());
+		}
+#endif
 
   undo_rec = trx_undo_rec_copy(undo_page, static_cast<uint32_t>(offset), heap);
 
@@ -2447,10 +2473,33 @@ static MY_ATTRIBUTE((warn_unused_result)) bool trx_undo_get_undo_rec(
 
   rw_lock_s_lock(&purge_sys->latch);
 
+#ifdef JS_TEST
+		std::chrono::steady_clock::time_point start;
+		if (buf_flag && undo_flag)
+			start = std::chrono::steady_clock::now();
+#endif
   missing_history = purge_sys->view.changes_visible(trx_id, name);
+#ifdef JS_TEST
+		if (buf_flag && undo_flag) {
+			auto cur_elapsed = 
+				std::chrono::duration_cast<std::chrono::nanoseconds>(
+						std::chrono::steady_clock::now() - start);
+			undo_page_io4 += 
+				static_cast<uint64_t>(cur_elapsed.count());
+		}
+#endif
   if (!missing_history) {
     *undo_rec = trx_undo_get_undo_rec_low(roll_ptr, heap, is_temp);
   }
+#ifdef JS_TEST
+		if (buf_flag && undo_flag) {
+			auto cur_elapsed = 
+				std::chrono::duration_cast<std::chrono::nanoseconds>(
+						std::chrono::steady_clock::now() - start);
+			undo_page_io3 += 
+				static_cast<uint64_t>(cur_elapsed.count());
+		}
+#endif
 
   rw_lock_s_unlock(&purge_sys->latch);
 
@@ -2509,6 +2558,11 @@ bool trx_undo_prev_version_build(
 
   ut_ad(!index->table->skip_alter_undo);
 
+#ifdef JS_TEST
+	std::chrono::steady_clock::time_point start;
+	if (buf_flag && undo_flag)
+		start = std::chrono::steady_clock::now();
+#endif
   if (trx_undo_get_undo_rec(roll_ptr, rec_trx_id, heap, is_temp,
                             index->table->name, &undo_rec)) {
     if (v_status & TRX_UNDO_PREV_IN_PURGE) {
@@ -2520,7 +2574,16 @@ bool trx_undo_prev_version_build(
       return false;
     }
   }
-
+#ifdef JS_TEST
+	if (buf_flag && undo_flag) {
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
+		undo_page_io0_1 += 
+			static_cast<uint64_t>(cur_elapsed.count());
+		start = std::chrono::steady_clock::now();
+	}
+#endif
   type_cmpl_t type_cmpl;
   ptr = trx_undo_rec_get_pars(undo_rec, &type, &cmpl_info, &dummy_extern,
                               &undo_no, &table_id, type_cmpl);
@@ -2562,6 +2625,16 @@ bool trx_undo_prev_version_build(
                                        info_bits, nullptr, heap, &update,
                                        lob_undo, type_cmpl);
   ut_a(ptr);
+#ifdef JS_TEST
+	if (buf_flag && undo_flag) {
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
+		undo_page_io0_2 += 
+			static_cast<uint64_t>(cur_elapsed.count());
+		start = std::chrono::steady_clock::now();
+	}
+#endif
 
   if (row_upd_changes_field_size_or_external(index, offsets, update)) {
     /* We should confirm the existence of disowned external data,
@@ -2621,6 +2694,16 @@ bool trx_undo_prev_version_build(
     rec_offs_make_valid(*old_vers, index, offsets);
     row_upd_rec_in_place(*old_vers, index, offsets, update, nullptr);
   }
+#ifdef JS_TEST
+	if (buf_flag && undo_flag) {
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
+		undo_page_io0_3 += 
+			static_cast<uint64_t>(cur_elapsed.count());
+		start = std::chrono::steady_clock::now();
+	}
+#endif
 
   /* Set the old value (which is the after image of an update) in the
   update vector to dtuple vrow */
@@ -2668,6 +2751,15 @@ bool trx_undo_prev_version_build(
   if (update != nullptr) {
     update->reset();
   }
+#ifdef JS_TEST
+	if (buf_flag && undo_flag) {
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
+		undo_page_io0_4 += 
+			static_cast<uint64_t>(cur_elapsed.count());
+	}
+#endif
 
   return true;
 }

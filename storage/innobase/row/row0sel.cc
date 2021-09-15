@@ -78,6 +78,12 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "include/pleaf.h"
 #include "include/ebi_tree_buf.h"
 #endif
+#ifdef JS_TEST
+#include <chrono>
+thread_local uint64_t local_elapsed_time; 
+thread_local bool undo_flag {false};
+extern thread_local bool buf_flag;
+#endif
 /** Maximum number of rows to prefetch; MySQL interface has another parameter */
 #define SEL_MAX_N_PREFETCH 16
 
@@ -3133,6 +3139,10 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t
                                       mtr_t *mtr, lob::undo_vers_t *lob_undo) {
   DBUG_TRACE;
 
+#ifdef JS_TEST
+	std::chrono::steady_clock::time_point start;
+	start = std::chrono::steady_clock::now();
+#endif
   dberr_t err;
 
   if (prebuilt->old_vers_heap) {
@@ -3144,7 +3154,15 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t
   err = row_vers_build_for_consistent_read(
       rec, mtr, clust_index, offsets, read_view, offset_heap,
       prebuilt->old_vers_heap, old_vers, vrow, lob_undo);
-
+#ifdef JS_TEST
+	if (buf_flag && undo_flag) {
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
+		local_elapsed_time += 
+			static_cast<uint64_t>(cur_elapsed.count());
+	}
+#endif
   return err;
 }
 
@@ -4679,6 +4697,7 @@ dberr_t row_search_mvcc(byte *buf, page_cur_mode_t mode,
   const rec_t* recent_rec;
   const rec_t* old_rec;
 #endif
+
   rec_offs_init(offsets_);
 
   ut_ad(index && pcur && search_tuple);
@@ -5689,13 +5708,18 @@ rec_loop:
       if (srv_force_recovery < 5 &&
           !lock_clust_rec_cons_read_sees(rec, index, offsets,
                                          trx_get_read_view(trx))) {
+#ifdef JS_TEST
+					undo_flag = true;
+#endif
         rec_t *old_vers;
         /* The following call returns 'offsets' associated with 'old_vers' */
         err = row_sel_build_prev_vers_for_mysql(
             trx->read_view, clust_index, prebuilt, rec, &offsets, &heap,
             &old_vers, need_vrow ? &vrow : nullptr, &mtr,
             prebuilt->get_lob_undo());
-
+#ifdef JS_TEST
+					undo_flag = false;
+#endif
         if (err != DB_SUCCESS) {
           goto lock_wait_or_error;
         }

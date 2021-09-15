@@ -56,6 +56,13 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "my_dbug.h"
 
+#ifdef JS_TEST
+#include <chrono>
+extern thread_local bool buf_flag;
+extern thread_local bool undo_flag;
+thread_local uint64_t undo_page_io;
+#endif
+
 /** Check whether all non-virtual columns in a index entries match
 @param[in]	index		the secondary index
 @param[in]	ientry1		first index entry to compare
@@ -1301,10 +1308,23 @@ dberr_t row_vers_build_for_consistent_read(
     /* If purge can't see the record then we can't rely on
     the UNDO log record. */
 
+#ifdef JS_TEST
+		std::chrono::steady_clock::time_point start;
+		if (buf_flag && undo_flag)
+			start = std::chrono::steady_clock::now();
+#endif
     bool purge_sees =
         trx_undo_prev_version_build(rec, mtr, version, index, *offsets, heap,
                                     &prev_version, nullptr, vrow, 0, lob_undo);
-
+#ifdef JS_TEST
+		if (buf_flag && undo_flag) {
+			auto cur_elapsed = 
+				std::chrono::duration_cast<std::chrono::nanoseconds>(
+						std::chrono::steady_clock::now() - start);
+			undo_page_io += 
+				static_cast<uint64_t>(cur_elapsed.count());
+		}
+#endif
     err = (purge_sees) ? DB_SUCCESS : DB_MISSING_HISTORY;
 
     if (prev_heap != nullptr) {

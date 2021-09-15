@@ -80,6 +80,13 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "ut0new.h"
 #endif /* !UNIV_HOTBACKUP */
 
+#ifdef JS_TEST
+#include <chrono>
+extern thread_local bool undo_flag;
+extern thread_local bool buf_flag;
+thread_local uint64_t local_buf_elapsed_time;
+thread_local uint64_t local_undo_elapsed_time;
+#endif
 #ifdef HAVE_LIBNUMA
 #include <numa.h>
 #include <numaif.h>
@@ -4269,6 +4276,11 @@ buf_block_t *buf_page_get_gen(const page_id_t &page_id,
   ut_ad(page_size.equals_to(space_page_size));
 #endif /* UNIV_DEBUG */
 
+#ifdef JS_TEST
+	std::chrono::steady_clock::time_point start;
+		start = std::chrono::steady_clock::now();
+
+#endif
   if (mode == Page_fetch::NORMAL && !fsp_is_system_temporary(page_id.space())) {
     Buf_fetch_normal fetch(page_id, page_size);
 
@@ -4280,8 +4292,26 @@ buf_block_t *buf_page_get_gen(const page_id_t &page_id,
     fetch.m_mtr = mtr;
     fetch.m_dirty_with_no_latch = dirty_with_no_latch;
 
-    return (fetch.single_page());
+#ifdef JS_TEST
+		auto ret = fetch.single_page();
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
 
+		if (buf_flag) {
+			if (undo_flag) {
+				local_undo_elapsed_time +=
+					static_cast<uint64_t>(cur_elapsed.count());
+			} else {
+				local_buf_elapsed_time +=
+					static_cast<uint64_t>(cur_elapsed.count());
+			}
+		}
+
+		return ret;
+#else
+    return (fetch.single_page());
+#endif
   } else {
     Buf_fetch_other fetch(page_id, page_size);
 
@@ -4292,8 +4322,26 @@ buf_block_t *buf_page_get_gen(const page_id_t &page_id,
     fetch.m_line = line;
     fetch.m_mtr = mtr;
     fetch.m_dirty_with_no_latch = dirty_with_no_latch;
+#ifdef JS_TEST
+		auto ret = fetch.single_page();
+		auto cur_elapsed = 
+			std::chrono::duration_cast<std::chrono::nanoseconds>(
+					std::chrono::steady_clock::now() - start);
 
+		if (buf_flag) {
+			if (undo_flag) {
+				local_undo_elapsed_time +=
+					static_cast<uint64_t>(cur_elapsed.count());
+			} else {
+				local_buf_elapsed_time +=
+					static_cast<uint64_t>(cur_elapsed.count());
+			}
+		}
+
+		return ret;
+#else
     return (fetch.single_page());
+#endif
   }
 }
 

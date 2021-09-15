@@ -203,6 +203,11 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "ebi_tree_process.h"
 #endif /* J3VM */
 
+#ifdef JS_TEST
+#include <chrono>
+//thread_local uint64_t local_entire_elasped_time;
+extern thread_local bool buf_flag;
+#endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif /* HAVE_UNISTD_H */
@@ -9810,8 +9815,24 @@ int ha_innobase::index_read(
 
       m_prebuilt->ins_sel_stmt = thd_is_ins_sel_stmt(m_user_thd);
 
+//#ifdef JS_TEST
+//	std::chrono::steady_clock::time_point start;
+//	if (buf_flag) {
+//		start = std::chrono::steady_clock::now();
+//	}
+//
+//#endif
       ret = row_search_mvcc(buf, mode, m_prebuilt, match_mode, 0);
-
+//#ifdef JS_TEST
+//	if (buf_flag) {
+//		auto cur_elapsed = 
+//			std::chrono::duration_cast<std::chrono::milliseconds>(
+//					std::chrono::steady_clock::now() - start);
+//		local_entire_elasped_time +=
+//			static_cast<uint64_t>(cur_elapsed.count());
+//	}
+//
+//#endif
     } else {
       m_prebuilt->session = thd_to_innodb_session(m_user_thd);
 
@@ -10061,8 +10082,25 @@ int ha_innobase::general_fetch(
   }
 
   if (!intrinsic) {
+//#ifdef JS_TEST
+//	std::chrono::steady_clock::time_point start;
+//	if (buf_flag) {
+//		start = std::chrono::steady_clock::now();
+//	}
+//
+//#endif
+
     ret = row_search_mvcc(buf, PAGE_CUR_UNSUPP, m_prebuilt, match_mode,
                           direction);
+//#ifdef JS_TEST
+//	if (buf_flag) {
+//		auto cur_elapsed = 
+//			std::chrono::duration_cast<std::chrono::milliseconds>(
+//					std::chrono::steady_clock::now() - start);
+//		local_entire_elasped_time +=
+//			static_cast<uint64_t>(cur_elapsed.count());
+//	}
+//#endif
 
   } else {
     ret = row_search_no_mvcc(buf, PAGE_CUR_UNSUPP, m_prebuilt, match_mode,
