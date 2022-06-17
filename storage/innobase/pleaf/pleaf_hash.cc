@@ -21,7 +21,7 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifdef J3VM
+#ifdef DIVA
 
 #include "read0types.h"
 #include "ha0ha.h"
@@ -134,5 +134,5 @@ rw_lock_t* PLeafGetHashLock(ulint hashcode)
 {
   return hash_get_lock(page_hash, hashcode);
 }
-#endif /* J3VM */
+#endif /* DIVA */
 

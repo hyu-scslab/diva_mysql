@@ -202,9 +202,9 @@ extern mysql_pfs_key_t index_online_log_key;
 extern mysql_pfs_key_t dict_table_stats_key;
 extern mysql_pfs_key_t trx_sys_rw_lock_key;
 extern mysql_pfs_key_t hash_table_locks_key;
-#ifdef J3VM
+#ifdef DIVA
 extern mysql_pfs_key_t pleaf_lock_key;
-#endif /* J3VM */
+#endif /* DIVA */
 #endif /* UNIV_PFS_RWLOCK */
 
 #ifdef HAVE_PSI_INTERFACE

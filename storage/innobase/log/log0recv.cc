@@ -2264,7 +2264,7 @@ static byte *recv_parse_or_apply_log_rec_body(
 
       break;
 
-#ifdef J3VM
+#ifdef DIVA
     case MLOG_REC_CLUST_TOGGLE_MARK:
     case MLOG_COMP_REC_CLUST_TOGGLE_MARK:
 
@@ -4255,7 +4255,7 @@ const char *get_mlog_string(mlog_id_t type) {
     case MLOG_COMP_PAGE_CREATE_SDI:
       return ("MLOG_COMP_PAGE_CREATE_SDI");
 
-#ifdef J3VM
+#ifdef DIVA
     case MLOG_REC_CLUST_TOGGLE_MARK:
       return ("MLOG_REC_CLUST_TOGGLE_MARK");
 

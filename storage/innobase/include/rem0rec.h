@@ -176,7 +176,7 @@ UNIV_INLINE
 bool rec_get_node_ptr_flag(const rec_t *rec) /*!< in: physical record */
     MY_ATTRIBUTE((warn_unused_result));
 
-#ifdef J3VM
+#ifdef DIVA
 /** The following function tells if record is toggle marked.
  @return nonzero if toggle marked */
 UNIV_INLINE
@@ -588,10 +588,10 @@ byte *rec_get_end(
 @return pointer to the origin of the copy */
 UNIV_INLINE
 rec_t *rec_copy(void *buf, const rec_t *rec, const ulint *offsets);
-#ifdef J3VM
+#ifdef DIVA
 UNIV_INLINE
 rec_t *rec_copy_special(void *buf, const rec_t *rec, const ulint *offsets);
-#endif /* J3VM */
+#endif /* DIVA */
 #ifndef UNIV_HOTBACKUP
 /** Determines the size of a data tuple prefix in a temporary file.
  @return total size */

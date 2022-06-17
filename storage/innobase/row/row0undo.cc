@@ -189,7 +189,7 @@ bool row_undo_search_clust_to_pcur(
   found = row_get_rec_roll_ptr(rec, clust_index, offsets) == node->roll_ptr;
 
   if (found) {
-#ifdef J3VM
+#ifdef DIVA
     /* JAESEON: TODO */
 #else
     ut_ad(row_get_rec_trx_id(rec, clust_index, offsets) == node->trx->id);

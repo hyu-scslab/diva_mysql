@@ -498,7 +498,7 @@ bool rec_get_node_ptr_flag(const rec_t *rec) /*!< in: physical record */
   return (REC_STATUS_NODE_PTR == rec_get_status(rec));
 }
 
-#ifdef J3VM
+#ifdef DIVA
 /** The following function tells if record is toggle marked.
  @return nonzero if toggle marked */
 UNIV_INLINE
@@ -552,7 +552,7 @@ void rec_set_toggle_flag_new(
   rec_set_info_bits_new(rec, val);
 
   if (page_zip) {
-    /* J3VM::TODO::Cannot find free space */
+    /* DIVA::TODO::Cannot find free space */
     ut_a(false);
   }
 }
@@ -1018,7 +1018,7 @@ UNIV_INLINE
 ulint rec_offs_size(
     const ulint *offsets) /*!< in: array returned by rec_get_offsets() */
 {
-#ifdef J3VM
+#ifdef DIVA
   ulint size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
   if (rec_is_user_rec(reinterpret_cast<rec_t*>(offsets[2]),
                         reinterpret_cast<dict_index_t*>(offsets[3]))) {
@@ -1079,7 +1079,7 @@ rec_t *rec_copy(void *buf, const rec_t *rec, const ulint *offsets) {
 
   return ((byte *)buf + extra_len);
 }
-#ifdef J3VM
+#ifdef DIVA
 UNIV_INLINE
 rec_t *rec_copy_special(void *buf, const rec_t *rec, const ulint *offsets) {
   ulint extra_len;

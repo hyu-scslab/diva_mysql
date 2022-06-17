@@ -175,7 +175,7 @@ static MY_ATTRIBUTE((warn_unused_result)) bool row_purge_remove_clust_if_poss_lo
 
   offsets = rec_get_offsets(rec, index, offsets_, ULINT_UNDEFINED, &heap);
 
-#ifdef J3VM
+#ifdef DIVA
   /* We should get roll_ptr from the record whose deleted flag set.
    */
 #endif

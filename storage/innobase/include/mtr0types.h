@@ -244,7 +244,7 @@ enum mlog_id_t {
   /** Extend the space */
   MLOG_FILE_EXTEND = 65,
 
-#ifdef J3VM
+#ifdef DIVA
   /** Mark clustered index record toggle */
   MLOG_REC_CLUST_TOGGLE_MARK = 66,
 

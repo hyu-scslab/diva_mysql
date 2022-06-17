@@ -227,7 +227,7 @@ void PageBulk::insert(const rec_t *rec, ulint *offsets) {
   page_header_set_ptr(m_page, nullptr, PAGE_HEAP_TOP, m_heap_top + rec_size);
 
   /* 1. Copy the record to page. */
-#ifdef J3VM
+#ifdef DIVA
   rec_t *insert_rec;
   if (rec_is_user_rec(rec, reinterpret_cast<dict_index_t*>(offsets[3]))) {
     insert_rec = rec_copy_special(m_heap_top, rec, offsets);

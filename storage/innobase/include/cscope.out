@@ -12480,7 +12480,7 @@ ulöt
 );
 
 624 #ifde‡
-J3VM
+DIVA
 
 
 629 
@@ -13420,7 +13420,7 @@ ulöt
 }
 
 176 #ifde‡
-J3VM
+DIVA
 
 
 177 
@@ -154008,7 +154008,7 @@ UNIV_LOG_LSN_DEBUG
  = 65,
 
 247 #ifde‡
-J3VM
+DIVA
 
 
 249 
@@ -166602,7 +166602,7 @@ u£_ˇche
 ;
 
 216 #ifde‡
-J3VM
+DIVA
 
 
 217 
@@ -178982,7 +178982,7 @@ right_off£t
 );
 
 54 
-J3VMShmemInô
+DIVAShmemInô
 ();
 
 56 
@@ -178990,7 +178990,7 @@ Size
 
 
 57 
-J3VMShmemSize
+DIVAShmemSize
 ();
 
 	@pleaf_buf.h
@@ -185626,7 +185626,7 @@ w¨n_unu£d_ªsu…
 ));
 
 179 #ifde‡
-J3VM
+DIVA
 
 
 182 
@@ -186770,7 +186770,7 @@ off£ts
 );
 
 591 #ifde‡
-J3VM
+DIVA
 
 
 592 
@@ -189128,7 +189128,7 @@ REC_STATUS_NODE_PTR
 }
 
 501 #ifde‡
-J3VM
+DIVA
 
 
 504 
@@ -191032,7 +191032,7 @@ off£ts
 )
 
 1021 #ifde‡
-J3VM
+DIVA
 
 
 1022 
@@ -191302,7 +191302,7 @@ exåa_Àn
 }
 
 1082 #ifde‡
-J3VM
+DIVA
 
 
 1083 
@@ -241360,7 +241360,7 @@ n‹edo
 );
 
 282 #ifde‡
-J3VM
+DIVA
 
 
 288 

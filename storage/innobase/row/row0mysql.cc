@@ -4671,9 +4671,9 @@ dberr_t row_scan_index_for_mysql(row_prebuilt_t *prebuilt, dict_index_t *index,
 
     n_threads = Parallel_reader::available_threads(n_threads);
 
-#ifdef J3VM
+#ifdef DIVA
     prebuilt->trx->is_parallel_reader = true;
-#endif /* J3VM */
+#endif /* DIVA */
     if (n_threads > 0) {
       /* No INSERT INTO  ... SELECT  and non-locking selects only. */
       trx_start_if_not_started_xa(prebuilt->trx, false);

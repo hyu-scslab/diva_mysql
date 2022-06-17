@@ -1393,7 +1393,7 @@ static bool trx_serialisation_number_get(
     added_trx_no = false;
   }
 
-#ifdef J3VM
+#ifdef DIVA
   trx_sys_mutex_exit();
 #else
   /* If the rollack segment is not empty then the
@@ -1478,7 +1478,7 @@ static bool trx_write_serialisation_history(
 
   bool serialised = false;
 
-#ifdef J3VM
+#ifdef DIVA
    if (trx->rsegs.m_redo.update_undo != nullptr) {
     trx_undo_set_state_at_finish(trx->rsegs.m_redo.update_undo, mtr);
   }
@@ -1921,7 +1921,7 @@ written */
   auto &gtid_persistor = clone_sys->get_gtid_persistor();
   gtid_persistor.set_persist_gtid(trx, false);
 
-#ifdef J3VM
+#ifdef DIVA
   if (trx->ebi_node) {
      EbiDecreaseRefCount(trx->ebi_node); 
      trx->ebi_node = nullptr;
@@ -1935,7 +1935,7 @@ written */
     if (trx->rsegs.m_noredo.insert_undo != nullptr) {
       trx_undo_insert_cleanup(&trx->rsegs.m_noredo, true);
     }
-#ifdef J3VM
+#ifdef DIVA
     if (trx->rsegs.m_redo.update_undo != nullptr) {
       trx_undo_update_cleanup_force(trx, &trx->rsegs.m_redo, false);
     }

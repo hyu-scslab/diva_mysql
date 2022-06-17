@@ -209,10 +209,10 @@ ibool ha_insert_for_fold_func(
   ut_ad(table);
   ut_ad(table->magic_n == HASH_TABLE_MAGIC_N);
 #if defined UNIV_AHI_DEBUG || defined UNIV_DEBUG
-#ifdef J3VM
+#ifdef DIVA
 #else
   ut_a(block->frame == page_align(data));
-#endif /* J3VM */
+#endif /* DIVA */
 #endif /* UNIV_AHI_DEBUG || UNIV_DEBUG */
   hash_assert_can_modify(table, fold);
   ut_ad(btr_search_enabled);

@@ -621,7 +621,7 @@ void btr_cur_set_deleted_flag_for_ibuf(
 UNIV_INLINE
 void btr_rec_set_deleted_flag(rec_t *rec, page_zip_des_t *page_zip, ulint flag);
 
-#ifdef J3VM
+#ifdef DIVA
 /** The following function is used to set the toggle bit of a record.
 @param[in,out]	rec		physical record
 @param[in,out]	page_zip	compressed page (or NULL)

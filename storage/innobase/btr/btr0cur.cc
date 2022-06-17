@@ -94,7 +94,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <array>
 
-#ifdef J3VM
+#ifdef DIVA
 #include "pleaf.h"
 #include "pleaf_mgr.h"
 #endif
@@ -2717,7 +2717,7 @@ dberr_t btr_cur_optimistic_insert(
   leaf = page_is_leaf(page);
 
   /* Calculate the record size when entry is converted to a record */
-#ifdef J3VM
+#ifdef DIVA
   if (rec_is_user_rec(entry, index)) {
     rec_size = rec_get_converted_size(index, entry) * 2 + REC_PLEAF_EXTRA_SIZE;
   } else {
@@ -2925,7 +2925,7 @@ dberr_t btr_cur_optimistic_insert(
                                     rec_size + PAGE_DIR_SLOT_SIZE);
     }
   }
-#ifdef J3VM
+#ifdef DIVA
   /* Initialize the right side of record */
   if (*rec) {
     if (rec_is_user_rec(*rec, index)) {
@@ -3085,7 +3085,7 @@ dberr_t btr_cur_pessimistic_insert(
     fil_space_release_free_extents(index->space, n_reserved);
   }
 
-#ifdef J3VM
+#ifdef DIVA
   /* Initialize the right side of record */
   if (*rec) {
     if (rec_is_user_rec(*rec, index)) {
@@ -3102,7 +3102,7 @@ dberr_t btr_cur_pessimistic_insert(
   return (DB_SUCCESS);
 }
 
-#ifdef J3VM
+#ifdef DIVA
 /*==================== UPDATE HELPER =========================*/
 #define DEFAULT_TOGGLE_TYPE			0x0UL
 #define UPDATE_TOGGLE_NORMAL		0x1UL
@@ -3475,7 +3475,7 @@ byte *btr_cur_parse_update_in_place(
   ulint rec_offset;
   mem_heap_t *heap;
   ulint *offsets;
-#ifdef J3VM
+#ifdef DIVA
   ulint toggle_flag;
   ulint add_size;
   rec_t *old_rec;
@@ -3519,7 +3519,7 @@ byte *btr_cur_parse_update_in_place(
 
   offsets = rec_get_offsets(rec, index, nullptr, ULINT_UNDEFINED, &heap);
 
-#ifdef J3VM
+#ifdef DIVA
   /* In SIRO-versioning, we must copy other-side record before redoing.
    We should check transaction id because we allow repeatable-update in the
    same record space. */
@@ -3606,7 +3606,7 @@ bool btr_cur_update_alloc_zip_func(
     goto out_of_space;
   }
 
-#if defined(J3VM) && !defined(UNIV_DEBUG)
+#if defined(DIVA) && !defined(UNIV_DEBUG)
 #else
   rec_offs_make_valid(page_cur_get_rec(cursor), index, offsets);
 #endif
@@ -3664,7 +3664,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   roll_ptr_t roll_ptr = 0;
   ulint was_delete_marked;
   ibool is_hashed;
-#ifdef J3VM
+#ifdef DIVA
   ulint add_size;
   ulint toggle_type;
   ulint toggle_flag;
@@ -3709,7 +3709,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
     rec = btr_cur_get_rec(cursor);
   }
 
-#ifdef J3VM
+#ifdef DIVA
   /* Cursor(rec) should point to left-version in SIRO-versioning. */
   toggle_type = DEFAULT_TOGGLE_TYPE;
   add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
@@ -3749,7 +3749,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   }
 
 
-#ifdef J3VM
+#ifdef DIVA
 
   if (rec_is_user_rec(rec, index) && toggle_type == UPDATE_TOGGLE_NORMAL) {
     pleaf_append_if_needed(rec, offsets, index, toggle_flag); 
@@ -3849,7 +3849,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   }
 
   assert_block_ahi_valid(block);
-#ifdef J3VM
+#ifdef DIVA
   if (rec_is_user_rec(rec, index)) {
     if (toggle_type == UPDATE_TOGGLE_ROLLBACK) {
       /* Nothing to do */
@@ -3884,7 +3884,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
     rw_lock_x_unlock(btr_get_search_latch(index));
   }
 
-#ifdef J3VM
+#ifdef DIVA
   /* When we write a redo log for update, we don't care about SIRO-versioning.
    However, when we parse a redo log in here, we do care about it seriously. */
   btr_cur_update_in_place_log(flags, rec, index, update, trx_id, roll_ptr, mtr);
@@ -3938,7 +3938,7 @@ func_exit:
     ibuf_update_free_bits_zip(block, mtr);
   }
 
-#if defined J3VM && defined UNIV_DEBUG
+#if defined DIVA && defined UNIV_DEBUG
   if (rec_is_user_rec(rec, index)) {
     ut_ad(rec_offs_validate(rec, index, offsets));
     ut_ad(rec_offs_validate(rec + add_size, index, offsets));
@@ -4326,7 +4326,7 @@ dberr_t btr_cur_pessimistic_update(ulint flags, btr_cur_t *cursor,
 
   rec = btr_cur_get_rec(cursor);
 
-#ifdef J3VM
+#ifdef DIVA
   /* We forbid these cases */
   if (rec_is_user_rec(rec, index)) {
     rec_print(stderr, rec, index);
@@ -4776,7 +4776,7 @@ dberr_t btr_cur_del_mark_set_clust_rec(
   dberr_t err;
   page_zip_des_t *page_zip;
   trx_t *trx;
-#ifdef J3VM
+#ifdef DIVA
   ulint add_size;
   ulint toggle_flag;
 #endif
@@ -4787,7 +4787,7 @@ dberr_t btr_cur_del_mark_set_clust_rec(
   ut_ad(buf_block_get_frame(block) == page_align(rec));
   ut_ad(page_is_leaf(page_align(rec)));
 
-#ifdef J3VM
+#ifdef DIVA
   toggle_flag = rec_get_toggle_flag(rec, rec_offs_comp(offsets));
   add_size = rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
 
@@ -4832,7 +4832,7 @@ dberr_t btr_cur_del_mark_set_clust_rec(
 
   page_zip = buf_block_get_page_zip(block);
 
-#ifdef J3VM
+#ifdef DIVA
   if (rec_is_user_rec(rec, index)) {
     pleaf_append_if_needed(rec, offsets, index, toggle_flag);
     /* Set toggle flag, and then set delete flag.
@@ -4883,7 +4883,7 @@ dberr_t btr_cur_del_mark_set_clust_rec(
     row_log_table_delete(trx, rec, entry, index, offsets, nullptr);
   }
 
-#ifdef J3VM
+#ifdef DIVA
   if (rec_is_user_rec(rec, index)) {
     /* Write a redo log for toggle flag. */
     btr_cur_tog_mark_set_clust_rec_log(rec, index, mtr);
@@ -4906,7 +4906,7 @@ dberr_t btr_cur_del_mark_set_clust_rec(
   btr_cur_del_mark_set_clust_rec_log(rec, index, trx->id, roll_ptr, mtr);
 #endif
 
-#if defined J3VM && defined UNIV_DEBUG
+#if defined DIVA && defined UNIV_DEBUG
   if (rec_is_user_rec(rec, index)) {
     ut_ad(rec_offs_validate(rec, index, offsets));
     ut_ad(rec_offs_validate(rec + add_size, index, offsets));

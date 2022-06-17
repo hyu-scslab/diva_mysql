@@ -181,7 +181,7 @@ class ReadView {
     return (!std::binary_search(p, p + m_ids.size(), id));
   }
 
-#ifdef J3VM
+#ifdef DIVA
    bool changes_visible_simple(trx_id_t id) const
       MY_ATTRIBUTE((warn_unused_result)) {
 
@@ -252,7 +252,7 @@ class ReadView {
   @return true if there are no transaction ids in the snapshot */
   bool empty() const { return (m_ids.empty()); }
 
-#ifdef J3VM
+#ifdef DIVA
   trx_id_t up_limit_id() const { return (m_up_limit_id); }
   ib_uint64_t seq_no() const { return (m_seq_no); }
   /**
@@ -265,7 +265,7 @@ class ReadView {
   m_trx_ids too and adjust the m_up_limit_id *, if required */
   void copy_complete_simple();
 
-#endif /* J3VM */
+#endif /* DIVA */
 
 #ifdef UNIV_DEBUG
   /**
@@ -337,9 +337,9 @@ class ReadView {
   they can be removed in purge if not needed by other views */
   trx_id_t m_low_limit_no;
 
-#ifdef J3VM
+#ifdef DIVA
   ib_uint64_t m_seq_no;
-#endif /* J3VM */
+#endif /* DIVA */
 
 #ifdef UNIV_DEBUG
   /** The low limit number up to which read views don't need to access

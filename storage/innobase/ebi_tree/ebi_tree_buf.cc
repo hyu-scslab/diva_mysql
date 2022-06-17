@@ -23,7 +23,7 @@
  *-------------------------------------------------------------------------
  */
 
-#ifdef J3VM
+#ifdef DIVA
 
 #include "read0types.h"
 #include "trx0sys.h"
@@ -467,4 +467,4 @@ EbiTreeBufUnrefInternal(EbiTreeBufDesc *buf) {
   __sync_fetch_and_sub(&buf->refcnt, 1);
 }
 
-#endif /* J3VM */
+#endif /* DIVA */

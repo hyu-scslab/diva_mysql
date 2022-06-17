@@ -22,7 +22,7 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifdef J3VM
+#ifdef DIVA
 
 #include "read0types.h"
 
@@ -117,4 +117,4 @@ EbiNode Dequeue(TaskQueue queue) {
   return (ret);
 }
 
-#endif /* J3VM */
+#endif /* DIVA */

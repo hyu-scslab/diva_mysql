@@ -21,7 +21,7 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifdef J3VM
+#ifdef DIVA
 
 #include "srv0srv.h"
 #include "read0types.h"

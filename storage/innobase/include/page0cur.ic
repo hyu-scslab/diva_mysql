@@ -213,7 +213,7 @@ hold the tuple converted record. */
   rec_t *rec;
   rec_t *insert_rec;
 
-#ifdef J3VM
+#ifdef DIVA
   ulint size;
   if (rec_is_user_rec(tuple, index)) {
     size = rec_get_converted_size(index, tuple) * 2 + REC_PLEAF_EXTRA_SIZE;

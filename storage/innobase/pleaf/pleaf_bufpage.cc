@@ -21,7 +21,7 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifdef J3VM
+#ifdef DIVA
 
 #include <assert.h>
 #include <stdbool.h>

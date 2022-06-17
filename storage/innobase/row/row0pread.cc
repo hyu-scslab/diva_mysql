@@ -40,7 +40,7 @@ Created 2018-01-27 by Sunny Bains */
 #include "row0vers.h"
 #include "ut0new.h"
 
-#ifdef J3VM
+#ifdef DIVA
 #include "include/pleaf.h"
 #include "include/ebi_tree_buf.h"
 #endif
@@ -359,7 +359,7 @@ bool Parallel_reader::Scan_ctx::check_visibility(const rec_t *&rec,
 
     if (m_config.m_index->is_clustered()) {
       trx_id_t rec_trx_id;
-#ifdef J3VM
+#ifdef DIVA
       trx_id_t old_rec_trx_id;
       ulint toggle_flag;
       ulint add_size;
@@ -504,7 +504,7 @@ bool Parallel_reader::Scan_ctx::check_visibility(const rec_t *&rec,
           return (false);
         }
       }
-#endif /* J3VM */
+#endif /* DIVA */
     } else {
       /* Secondary index scan not supported yet. */
       ut_error;

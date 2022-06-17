@@ -36,7 +36,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "srv0srv.h"
 #include "trx0sys.h"
 
-#ifdef J3VM
+#ifdef DIVA
 #include "include/ebi_tree_utils.h"
 #include "include/ebi_tree.h"
 #endif
@@ -341,9 +341,9 @@ MVCC::MVCC(ulint size) {
 
     UT_LIST_ADD_FIRST(m_free, view);
   }
-#ifdef J3VM
+#ifdef DIVA
   m_view_seq_no = 1;
-#endif /* J3VM */
+#endif /* DIVA */
 }
 
 MVCC::~MVCC() {
@@ -540,7 +540,7 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
       view->m_closed = false;
 
       if (view->m_low_limit_id == trx_sys_get_max_trx_id()) {
-#ifdef J3VM
+#ifdef DIVA
         if (trx->declared_to_be_inside_innodb || 
             trx->is_parallel_reader) {
 
@@ -555,7 +555,7 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
         return;
 #else
         return;
-#endif /* J3VM */
+#endif /* DIVA */
       } else {
         view->m_closed = true;
       }
@@ -565,17 +565,17 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
 
     UT_LIST_REMOVE(m_views, view);
 
-#ifdef J3VM
+#ifdef DIVA
     view->m_seq_no = __sync_fetch_and_add(&m_view_seq_no, 1);
-#endif /* J3VM */
+#endif /* DIVA */
 
   } else {
     mutex_enter(&trx_sys->mutex);
 
     view = get_view();
-#ifdef J3VM
+#ifdef DIVA
     view->m_seq_no = __sync_fetch_and_add(&m_view_seq_no, 1);
-#endif /* J3VM */
+#endif /* DIVA */
   }
 
   if (view != nullptr) {
@@ -587,7 +587,7 @@ void MVCC::view_open(ReadView *&view, trx_t *trx) {
 
     ut_ad(validate());
   }
-#ifdef J3VM
+#ifdef DIVA
   if (view != nullptr && (trx->declared_to_be_inside_innodb ||
       trx->is_parallel_reader)) {
     ut_a(trx->isolation_level == TRX_ISO_REPEATABLE_READ &&
@@ -638,7 +638,7 @@ ReadView *MVCC::get_oldest_view() const {
   return (view);
 }
 
-#ifdef J3VM
+#ifdef DIVA
 /**
 Get the latest (active) view in the system.
 @return latest view if found or NULL */
@@ -668,7 +668,7 @@ ReadView *MVCC::get_latest_view() const {
 
   return (view);
 }
-#endif /* J3VM */
+#endif /* DIVA */
 
 /**
 Copy state from another view. Must call copy_complete() to finish.
@@ -767,7 +767,7 @@ ulint MVCC::size() const {
   return (size);
 }
 
-#ifdef J3VM
+#ifdef DIVA
 /* Get sequence number of latest view */
 void MVCC::get_latest_view_info(ib_uint64_t& seq_no, trx_id_t& trx_id) {
   ReadView* latest_view;
@@ -846,7 +846,7 @@ void ReadView::copy_complete_simple() {
   m_creator_trx_id = 0;
 }
 
-#endif /* J3VM */
+#endif /* DIVA */
 
 /**
 Close a view created by the above function.

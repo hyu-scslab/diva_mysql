@@ -495,9 +495,9 @@ LatchDebug::LatchDebug() {
   LEVEL_MAP_INSERT(SYNC_TRX_I_S_LAST_READ);
   LEVEL_MAP_INSERT(SYNC_TRX_I_S_RWLOCK);
   LEVEL_MAP_INSERT(SYNC_LEVEL_VARYING);
-#ifdef J3VM
+#ifdef DIVA
   LEVEL_MAP_INSERT(SYNC_PLEAF);
-#endif /* J3VM */
+#endif /* DIVA */
   LEVEL_MAP_INSERT(SYNC_NO_ORDER_CHECK);
 
   /* Enum count starts from 0 */
@@ -735,9 +735,9 @@ Latches *LatchDebug::check_order(const latch_t *latch,
     case SYNC_TEMP_POOL_MANAGER:
     case SYNC_PARSER:
     case SYNC_DICT:
-#ifdef J3VM
+#ifdef DIVA
 		case SYNC_PLEAF:
-#endif /* J3VM */
+#endif /* DIVA */
 
       basic_check(latches, level, level);
       break;
@@ -1503,9 +1503,9 @@ static void sync_latch_meta_init() UNIV_NOTHROW {
 
   LATCH_ADD_MUTEX(DBLWR, SYNC_DBLWR, dblwr_mutex_key);
 
-#ifdef J3VM
+#ifdef DIVA
   LATCH_ADD_RWLOCK(PLEAF, SYNC_PLEAF, pleaf_lock_key);
-#endif /* J3VM */
+#endif /* DIVA */
   LATCH_ADD_MUTEX(TEST_MUTEX, SYNC_NO_ORDER_CHECK, PFS_NOT_INSTRUMENTED);
 
   latch_id_t id = LATCH_ID_NONE;

@@ -1288,7 +1288,7 @@ rec_t *page_cur_insert_rec_low(
   }
 
   /* 3. Create the record */
-#ifdef J3VM
+#ifdef DIVA
 	if (rec_is_user_rec(rec, index)) {
 		insert_rec = rec_copy_special(insert_buf, rec, offsets);
 	} else {
@@ -2126,7 +2126,7 @@ void page_copy_rec_list_end_to_created_page(
 
   do {
     offsets = rec_get_offsets(rec, index, offsets, ULINT_UNDEFINED, &heap);
-#ifdef J3VM
+#ifdef DIVA
 		if (rec_is_user_rec(rec, index)) {
     	insert_rec = rec_copy_special(heap_top, rec, offsets);
 		} else {

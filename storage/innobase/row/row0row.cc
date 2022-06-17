@@ -401,7 +401,7 @@ static inline dtuple_t *row_build_low(ulint type, const dict_index_t *index,
     /* Take a copy of rec to heap */
     buf = static_cast<byte *>(mem_heap_alloc(heap, rec_offs_size(offsets)));
 
-#ifdef J3VM
+#ifdef DIVA
     if (rec_is_user_rec(rec, index)) {
       copy = rec_copy_special(buf, rec, offsets);
     } else {

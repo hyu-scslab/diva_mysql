@@ -885,7 +885,7 @@ static ulint trx_undo_insert_header_reuse(
 
   new_free = free + TRX_UNDO_LOG_OLD_HDR_SIZE;
 
-#ifdef J3VM
+#ifdef DIVA
   /* Insert & update undo data is not needed after commit: we may free all
   the space on the page. ** ONLY IN SIRO-VERSIONING ** */
   ut_a(mach_read_from_2(undo_page + TRX_UNDO_PAGE_HDR + TRX_UNDO_PAGE_TYPE) ==
@@ -1675,7 +1675,7 @@ static trx_undo_t *trx_undo_reuse_cached(trx_t *trx, trx_rseg_t *rseg,
     ut_a(mach_read_from_2(undo_page + TRX_UNDO_PAGE_HDR + TRX_UNDO_PAGE_TYPE) ==
          TRX_UNDO_UPDATE);
 
-#ifdef J3VM
+#ifdef DIVA
     /* Same routine as TRX_UNDO_INSERT. ** ONLY IN SIRO-VERSIONING ** */
     offset = trx_undo_insert_header_reuse(undo_page, trx_id, mtr);
 #else
@@ -1851,12 +1851,12 @@ page_t *trx_undo_set_state_at_finish(
   } else if (undo->type == TRX_UNDO_INSERT) {
     state = TRX_UNDO_TO_FREE;
   } else {
-#ifdef J3VM
+#ifdef DIVA
     /** Always make state TRX_UNDO_CACHED. See trx_undo_cleanup_force(). */
     state = TRX_UNDO_CACHED;
 #else
     state = TRX_UNDO_TO_PURGE;
-#endif /* J3VM */
+#endif /* DIVA */
   }
 
   undo->state = state;
@@ -1995,7 +1995,7 @@ void trx_undo_insert_cleanup(trx_undo_ptr_t *undo_ptr, bool noredo) {
   rseg->unlatch();
 }
 
-#ifdef J3VM
+#ifdef DIVA
 /** Frees an update undo log after a transaction commit or rollback.
 Knowledge of updates is not needed after a commit or rollback, therefore
 the data can be discarded. ** ONLY IN SIRO-VERSIONING **

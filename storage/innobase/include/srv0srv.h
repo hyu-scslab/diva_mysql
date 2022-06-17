@@ -204,13 +204,13 @@ struct Srv_threads {
   /** The ts_alter_encrypt thread. */
   IB_thread m_ts_alter_encrypt;
 
-#ifdef J3VM
+#ifdef DIVA
   /** PLeaf generation thread. */
   IB_thread m_pleaf_generator;
 
   /** EBI-tree modification thread. */
   IB_thread m_ebi_tree;
-#endif /* J3VM */
+#endif /* DIVA */
 
   /** Thread doing rollbacks during recovery. */
   IB_thread m_trx_recovery_rollback;
@@ -321,13 +321,13 @@ extern os_event_t srv_buf_dump_event;
 /** The buffer pool resize thread waits on this event. */
 extern os_event_t srv_buf_resize_event;
 
-#ifdef J3VM
+#ifdef DIVA
 /** The pleaf generator thread waits on this event. */
 extern os_event_t srv_pleaf_generator_event;
 
 /** The ebi tree thread waits on this event. */
 extern os_event_t srv_ebi_tree_event;
-#endif /* J3VM */
+#endif /* DIVA */
 
 #endif /* !UNIV_HOTBACKUP */
 
@@ -814,10 +814,10 @@ extern mysql_pfs_key_t srv_worker_thread_key;
 extern mysql_pfs_key_t trx_recovery_rollback_thread_key;
 extern mysql_pfs_key_t srv_ts_alter_encrypt_thread_key;
 extern mysql_pfs_key_t parallel_read_thread_key;
-#ifdef J3VM
+#ifdef DIVA
 extern mysql_pfs_key_t pleaf_generator_thread_key;
 extern mysql_pfs_key_t ebi_tree_thread_key;
-#endif /* J3VM */
+#endif /* DIVA */
 #endif /* UNIV_PFS_THREAD */
 #endif /* !UNIV_HOTBACKUP */
 

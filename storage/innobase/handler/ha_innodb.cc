@@ -197,11 +197,11 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include <string>
 #include <vector>
 
-#ifdef J3VM
+#ifdef DIVA
 #include "pleaf_mgr.h"
 #include "ebi_tree_utils.h"
 #include "ebi_tree_process.h"
-#endif /* J3VM */
+#endif /* DIVA */
 
 #ifdef JS_TEST
 #include <chrono>
@@ -722,9 +722,9 @@ static PSI_rwlock_info all_innodb_rwlocks[] = {
     PSI_RWLOCK_KEY(index_online_log, 0, PSI_DOCUMENT_ME),
     PSI_RWLOCK_KEY(dict_table_stats, 0, PSI_DOCUMENT_ME),
     PSI_RWLOCK_KEY(hash_table_locks, 0, PSI_DOCUMENT_ME),
-#ifdef J3VM
+#ifdef DIVA
     PSI_RWLOCK_KEY(pleaf_lock, 0, PSI_DOCUMENT_ME),
-#endif /* J3VM */
+#endif /* DIVA */
 };
 #endif /* UNIV_PFS_RWLOCK */
 
@@ -745,10 +745,10 @@ static PSI_thread_info all_innodb_threads[] = {
     PSI_KEY(io_read_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(io_write_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(buf_resize_thread, 0, 0, PSI_DOCUMENT_ME),
-#ifdef J3VM
+#ifdef DIVA
     PSI_KEY(pleaf_generator_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(ebi_tree_thread, 0, 0, PSI_DOCUMENT_ME),
-#endif /* J3VM */
+#endif /* DIVA */
     PSI_KEY(log_writer_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(log_checkpointer_thread, 0, 0, PSI_DOCUMENT_ME),
     PSI_KEY(log_flusher_thread, 0, 0, PSI_DOCUMENT_ME),

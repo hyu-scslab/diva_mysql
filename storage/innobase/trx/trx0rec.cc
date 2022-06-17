@@ -1229,7 +1229,7 @@ static ulint trx_undo_page_report_modify(
         TRX_UNDO_UPDATE);
   table = index->table;
 
-#ifdef J3VM
+#ifdef DIVA
   if (rec_is_user_rec(rec, index) && 
       rec_get_toggle_flag(rec, dict_table_is_comp(table))) {
     rec += rec_offs_data_size(offsets) + rec_offs_extra_size(offsets);
@@ -1714,8 +1714,8 @@ static ulint trx_undo_page_report_modify(
   /* Write to the REDO log about this change in the UNDO log */
 
   trx_undof_page_add_undo_rec_log(undo_page, first_free, ptr - undo_page, mtr);
-#ifdef J3VM
-  /* J3VM:: Our side */
+#ifdef DIVA
+  /* DIVA:: Our side */
 #endif
   return first_free;
 }

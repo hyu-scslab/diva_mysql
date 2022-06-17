@@ -122,7 +122,7 @@ B-tree page that is the leftmost page on its level
 was inserted/updated after an instant ADD COLUMN. */
 #define REC_INFO_INSTANT_FLAG 0x80UL
 
-#ifdef J3VM
+#ifdef DIVA
 /* The toggle flag in info bits. When it is set to 1, it means this record
 is the committed(older) version in an index page. */
 #define REC_INFO_TOGGLE_FLAG 0x40UL
@@ -167,13 +167,13 @@ significant bit denotes that the tail of a field is stored off-page. */
 /* Length of the rec_get_offsets() header */
 #define REC_OFFS_HEADER_SIZE 4
 #else /* UNIV_DEBUG */
-#ifdef J3VM
+#ifdef DIVA
 /* Length of the rec_get_offsets() header */
 #define REC_OFFS_HEADER_SIZE 4
-#else /* J3VM */
+#else /* DIVA */
 /* Length of the rec_get_offsets() header */
 #define REC_OFFS_HEADER_SIZE 2
-#endif /* J3VM */
+#endif /* DIVA */
 #endif /* UNIV_DEBUG */
 
 /* Number of elements that should be initially allocated for the
@@ -272,7 +272,7 @@ UNIV_INLINE MY_ATTRIBUTE((warn_unused_result)) ulint
 }
 
 #ifdef UNIV_DEBUG
-#ifdef J3VM
+#ifdef DIVA
 /** Check if the info bits are valid.
 @param[in]	bits	info bits to check
 @return true if valid */
@@ -406,7 +406,7 @@ ulint rec_get_n_fields(const rec_t *rec,          /*!< in: physical record */
   }
 }
 
-#ifdef J3VM
+#ifdef DIVA
 /** Check if a record is user record.
 @param[in]	rec	physical record
 @param[in]	index	index where the record resides
@@ -588,7 +588,7 @@ UNIV_INLINE MY_ATTRIBUTE((warn_unused_result)) ibool rec_offs_validate(
   ulint comp = *rec_offs_base(offsets) & REC_OFFS_COMPACT;
 
   if (rec) {
-#ifdef J3VM
+#ifdef DIVA
 #else
     ut_ad((ulint)rec == offsets[2]);
 #endif
@@ -663,7 +663,7 @@ bool rec_offs_cmp(ulint *offsets1, ulint *offsets2);
 std::ostream &rec_offs_print(std::ostream &out, const ulint *offsets);
 #else
 
-#ifdef J3VM
+#ifdef DIVA
 UNIV_INLINE
 void rec_offs_make_valid(
     const rec_t *rec,          /*!< in: record */
@@ -680,7 +680,7 @@ void rec_offs_make_valid(
 }
 #else
 #define rec_offs_make_valid(rec, index, offsets) ((void)0)
-#endif /* J3VM */
+#endif /* DIVA */
 #endif /* UNIV_DEBUG */
 
 /** The following function tells if a new-style record is instant record or not

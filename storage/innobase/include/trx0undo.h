@@ -279,7 +279,7 @@ the data can be discarded.
 @param[in]	noredo		whether the undo tablespace is redo logged */
 void trx_undo_insert_cleanup(trx_undo_ptr_t *undo_ptr, bool noredo);
 
-#ifdef J3VM
+#ifdef DIVA
 /** Frees an update undo log after a transaction commit or rollback.
 Knowledge of updates is not needed after a commit or rollback, therefore
 the data can be discarded. ** ONLY IN SIRO-VERSIONING **

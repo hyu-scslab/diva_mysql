@@ -144,7 +144,7 @@ const rec_t *ha_search_and_get_data(
     ulint fold)          /*!< in: folded value of the searched data */
 {
   hash_assert_can_search(table, fold);
-#ifdef J3VM
+#ifdef DIVA
   /** JAESEON:: TODO. */
 #else
   ut_ad(btr_search_enabled);
@@ -171,7 +171,7 @@ ha_node_t *ha_search_with_data(
 
   hash_assert_can_search(table, fold);
 
-#ifdef J3VM
+#ifdef DIVA
   // TODO
 #else
   ut_ad(btr_search_enabled);
@@ -201,7 +201,7 @@ ibool ha_search_and_delete_if_found(
   ha_node_t *node;
 
   hash_assert_can_modify(table, fold);
-#ifdef J3VM
+#ifdef DIVA
   /** JAESEON: TODO. */
 #else
   ut_ad(btr_search_enabled);

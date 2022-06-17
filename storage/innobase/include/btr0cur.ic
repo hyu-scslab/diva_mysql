@@ -173,7 +173,7 @@ void btr_rec_set_deleted_flag(rec_t *rec, page_zip_des_t *page_zip,
   }
 }
 
-#ifdef J3VM
+#ifdef DIVA
 UNIV_INLINE
 void btr_rec_set_toggle_flag(rec_t *rec, page_zip_des_t *page_zip,
                               ulint flag) {

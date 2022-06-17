@@ -74,7 +74,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "my_dbug.h"
 
-#ifdef J3VM
+#ifdef DIVA
 #include "include/pleaf.h"
 #include "include/ebi_tree_buf.h"
 #endif
@@ -3219,7 +3219,7 @@ dberr_t Row_sel_get_clust_rec_for_mysql::operator()(
   dberr_t err;
   trx_t *trx;
 
-#ifdef J3VM
+#ifdef DIVA
   ulint add_size;
   const rec_t* recent_rec;
   const rec_t* old_rec;
@@ -3376,7 +3376,7 @@ dberr_t Row_sel_get_clust_rec_for_mysql::operator()(
 
     /* If the isolation level allows reading of uncommitted data,
     then we never look for an earlier version */
-#ifdef J3VM
+#ifdef DIVA
     if (rec_is_user_rec(clust_rec, clust_index)) {
       add_size = rec_offs_data_size(*offsets) + rec_offs_extra_size(*offsets);
 
@@ -4691,7 +4691,7 @@ dberr_t row_search_mvcc(byte *buf, page_cur_mode_t mode,
   bool spatial_search = false;
   ulint end_loop = 0;
 
-#ifdef J3VM
+#ifdef DIVA
   ulint toggle_flag;
   ulint add_size;
   const rec_t* recent_rec;
@@ -5545,7 +5545,7 @@ rec_loop:
       err = DB_RECORD_NOT_FOUND;
       goto normal_return;
     }
-#ifdef J3VM
+#ifdef DIVA
     /* rec should point to the recent one after this point if lock_type is not
      LOCK_NONE. In SIRO-versioning, we cannot guarantee that rec is the recent
      version, so check it using by toggle flag. */
@@ -5567,7 +5567,7 @@ rec_loop:
       high force recovery level set, we try to avoid crashes
       by skipping this lookup */
 
-#ifdef J3VM
+#ifdef DIVA
       /* We assume this record is user record at this point. */
       if (rec_is_user_rec(rec, index)) {
         toggle_flag = rec_get_toggle_flag(rec, comp);
@@ -6088,7 +6088,7 @@ rec_loop:
         result_rec = rec;
       }
 
-#ifdef J3VM
+#ifdef DIVA
       if (rec_is_user_rec(result_rec, index)) {
         memcpy(buf + 4, result_rec - rec_offs_extra_size(offsets), add_size);
       } else {

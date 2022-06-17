@@ -54,7 +54,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #endif /* !UNIV_HOTBACKUP */
 #include "srv0srv.h"
 
-#ifdef J3VM
+#ifdef DIVA
 #include "read0types.h"
 #include "include/ebi_tree_utils.h"
 #include "include/ebi_tree.h"
@@ -865,11 +865,11 @@ struct trx_t {
     SERIALIZABLE
   };
 
-#ifdef J3VM
+#ifdef DIVA
   EbiNode ebi_node {nullptr};
 
   bool is_parallel_reader {false};
-#endif /* J3VM */
+#endif /* DIVA */
   /** Mutex protecting the fields `state` and `lock` (except some fields of
   `lock`,  which are protected by lock_sys latches) */
   mutable TrxMutex mutex;

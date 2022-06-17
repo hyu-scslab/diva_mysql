@@ -119,7 +119,7 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t row_undo_mod_clust_low(
       btr_pcur_restore_position(mode, pcur, mtr);
 
   ut_ad(success);
-#ifdef J3VM
+#ifdef DIVA
   /** JAESEON: TODO. */
 #else
   ut_ad(rec_get_trx_id(btr_cur_get_rec(btr_cur), btr_cur_get_index(btr_cur)) ==
@@ -330,7 +330,7 @@ static MY_ATTRIBUTE((warn_unused_result)) dberr_t
     }
   }
 
-#ifdef J3VM
+#ifdef DIVA
   /* JAESEON */
 #else
   ut_ad(rec_get_trx_id(btr_pcur_get_rec(pcur), index) == node->new_trx_id);
