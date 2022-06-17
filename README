@@ -1,3 +1,13 @@
+To build DIVA, please compile the project with the flag "DIVA" by appending it to cmake parameters like below:
+$ cmake [other_required_parameters] -DCMAKE_CXX_FLAGS="-DDIVA" -DCMAKE_C_FLAGS="-DDIVA"
+
+You can parameterize the buffer size for p-leaf pages and ebi-tree version pages like below:
+$ cmake [other_required_parameters] -DCMAKE_CXX_FLAGS="-DDIVA -DPLEAF_NUM_PAGE=10000 -DEBI_NUM_PAGE=10000" -DCMAKE_C_FLAGS="-DDIVA -DPLEAF_NUM_PAGE=10000 -DEBI_NUM_PAGE=10000"
+
+PLEAF_NUM_PAGE: the number of p-leaf buffer pages (x 4KiB)
+EBI_NUM_PAGE: the number of the ebi-tree buffer pages (x 8KiB)
+
+
 Copyright (c) 2000, 2021, Oracle and/or its affiliates.
 
 This is a release of MySQL, an SQL database server.
